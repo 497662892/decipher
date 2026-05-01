@@ -1,0 +1,40 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Private competition data and generated artifacts
+data/
+outputs/
+models/
+submissions/
+*.bed
+*.bim
+*.fam
+*.pgen
+*.pvar
+*.psam
+*.vcf
+*.vcf.gz
+*.bgen
+*.sample
+*.sumstats
+*.parquet
+
+# Logs and local secrets
+*.log
+.env
+.env.*
+
+
+plink_qc_tmp/
+*.afreq
