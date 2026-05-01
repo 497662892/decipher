@@ -37,7 +37,7 @@ External PRS tools are not installed by `uv` and should be managed separately: `
 ```bash
 uv run python scripts/inventory_sumstats.py --root data/raw --out data/processed/sumstats_inventory.csv
 uv run python scripts/make_splits.py --phenotype data/raw/phenotype.csv --patient-col patient_id --labels disease1,disease2,disease3 --out data/processed/splits/split_seed42.csv
-uv run python scripts/run_cv.py --phenotype data/processed/phenotype.csv --splits data/processed/splits/split_seed42.csv --labels disease1,disease2,disease3 --covariates age,sex,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10 --out-dir outputs/cv_baseline
+uv run python scripts/run_cv.py --phenotype data/processed/phenotype.csv --splits data/processed/splits/split_seed42.csv --labels disease1,disease2,disease3 --covariates age,sex,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10 --eligibility-config configs/disease_eligibility.yaml --out-dir outputs/cv_baseline
 ```
 
 Generate an inspectable PLINK2 P+T command file after standardizing a disease summary-statistics file:
@@ -57,6 +57,8 @@ uv run python scripts/write_pt_commands.py --genotype-kind pfile --bfile-prefix 
 If summary statistics are official and independent of the competition training labels, they may be reused across folds. If summary statistics are derived from internal training labels, regenerate them inside each outer fold using only training-fold patients.
 
 ## Validation
+
+Disease-specific eligibility rules are configured in `configs/disease_eligibility.yaml`. For breast cancer, update the disease key and female sex encodings to match the official phenotype table before running CV. `scripts/run_cv.py` writes `eligibility_counts.csv` so the filtered analysis set is auditable.
 
 Use the same 5 folds for every method. Report per-disease and macro summaries for AUC, AUPRC, Brier score, PRS per-standard-deviation odds ratio, and risk-stratification odds ratios.
 

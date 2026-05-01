@@ -45,6 +45,7 @@ uv run --extra dev ruff check .
 
 ## PRS Validation Rules
 
+- Breast cancer analyses must be restricted to eligible female patients using `configs/disease_eligibility.yaml` and `--eligibility-config`.
 - Use one shared patient-level 5-fold split for method comparison.
 - The same patient must never appear in more than one fold.
 - All methods should use the same folds for fair comparison.

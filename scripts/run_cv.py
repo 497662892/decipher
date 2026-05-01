@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from decipehr.eligibility import eligible_counts, filter_eligible, load_eligibility_rules
 from decipehr.io import read_table, write_table
 from decipehr.metrics import binary_metrics, odds_ratio_per_sd, risk_stratification_or
 from decipehr.models import fit_predict_logistic
@@ -35,6 +36,11 @@ def main() -> None:
     parser.add_argument("--covariates", default="")
     parser.add_argument("--prs-scores", default=None, help="Optional table with patient_id and PRS columns.")
     parser.add_argument("--prs-prefix", default="prs_", help="Expected PRS column prefix, e.g. prs_disease1.")
+    parser.add_argument(
+        "--eligibility-config",
+        default=None,
+        help="Optional YAML with disease-specific eligible patient rules.",
+    )
     parser.add_argument("--out-dir", required=True)
     args = parser.parse_args()
 
@@ -43,6 +49,7 @@ def main() -> None:
     covariates = parse_csv_list(args.covariates)
     phenotype = read_table(args.phenotype)
     splits = read_table(args.splits)
+    eligibility_rules = load_eligibility_rules(args.eligibility_config)
     require_columns(phenotype, [patient_col, *labels, *covariates], "phenotype")
     require_columns(splits, [patient_col, "fold"], "splits")
     data = phenotype.merge(splits[[patient_col, "fold"]], on=patient_col, how="inner")
@@ -60,16 +67,21 @@ def main() -> None:
     predictions = []
     metric_rows = []
     for disease in labels:
+        disease_data = filter_eligible(data, disease, eligibility_rules)
+        if disease_data.empty:
+            raise ValueError(f"No eligible patients remain for disease {disease}")
         for method, feature_cols, applies_to in methods:
             if applies_to is not None and applies_to != disease:
                 continue
             features = list(feature_cols)
             if not features:
-                data["_intercept_only"] = 1.0
+                disease_data["_intercept_only"] = 1.0
                 features = ["_intercept_only"]
-            for fold in sorted(data["fold"].unique()):
-                train = data[data["fold"] != fold].copy()
-                val = data[data["fold"] == fold].copy()
+            for fold in sorted(disease_data["fold"].unique()):
+                train = disease_data[disease_data["fold"] != fold].copy()
+                val = disease_data[disease_data["fold"] == fold].copy()
+                if val.empty:
+                    continue
                 pred = fit_predict_logistic(
                     train=train,
                     val=val,
@@ -90,6 +102,7 @@ def main() -> None:
     fold_metrics = pd.DataFrame(metric_rows)
     write_table(oof, out_dir / "oof_predictions.csv")
     write_table(fold_metrics, out_dir / "fold_metrics.csv")
+    write_table(eligible_counts(data, labels, eligibility_rules), out_dir / "eligibility_counts.csv")
 
     summary_rows = []
     for (disease, method), frame in oof.groupby(["disease", "method"]):
