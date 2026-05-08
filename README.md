@@ -30,17 +30,32 @@ External PRS tools are not installed by `uv` and should be managed separately: `
 
 1. Extract the competition contract from `DREAM_data_V1.pdf`, `04_09 decipEHR project.pdf`, and existing notebooks.
 2. Inventory and standardize official/provided summary statistics.
-3. Create disease-specific patient-level 5-fold splits for fair per-disease model comparison.
-4. Run covariate-only, P+T, stronger PRS, and ensemble comparisons using out-of-fold predictions.
-5. Retrain the selected final pipeline on all official training data before generating the official submission.
+3. Use the newly released official validation labels for model comparison.
+4. For each disease, repeat this validation procedure 1000 times: sample 1000 official validation patients for prediction, fit the full logistic regression model on the remaining validation patients, and score the sampled patients only.
+5. Select the final model from the repeated-holdout validation summaries before generating the official submission.
 
 ```bash
 uv run python scripts/inventory_sumstats.py --root data/raw --out data/processed/sumstats_inventory.csv
-uv run python scripts/prepare_data.py --phenotype data/raw/Training_Cov_file.txt --patient-col sampleid --labels cad,bc,T2D --covariates sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd --out data/processed/phenotype.csv
-uv run python scripts/create_ancestry_clusters.py --phenotype data/processed/phenotype.csv --patient-col sampleid --labels cad,bc,T2D --age-col age_sd --sex-col sex --clusters-out data/processed/ancestry_clusters.csv --report-out outputs/ancestry/ancestry_cluster_report.csv --quality-out outputs/ancestry/ancestry_cluster_quality.csv --plot-out outputs/ancestry/pc1_pc2_clusters.svg
-uv run python scripts/make_splits.py --phenotype data/processed/phenotype.csv --patient-col sampleid --labels cad,bc,T2D --disease-specific --ancestry-clusters data/processed/ancestry_clusters.csv --age-col age_sd --sex-col sex --sex-balance-labels cad,T2D --eligibility-config configs/disease_eligibility.yaml --diagnostics-out outputs/cv/disease_specific_split_summary.csv --out data/processed/splits/disease_specific_split_seed42.csv
-uv run python scripts/run_cv.py --phenotype data/processed/phenotype.csv --splits data/processed/splits/disease_specific_split_seed42.csv --patient-col sampleid --labels cad,bc,T2D --covariates sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd --eligibility-config configs/disease_eligibility.yaml --out-dir outputs/cv_baseline
+uv run python scripts/run_official_validation.py \
+  --labelled-phenotype /gpfs/data/deciphEHRlab/deciphEHRdream/holdout_phase/phenotype_files/Training_Phase_Cov_file_with_Phenotype.txt \
+  --validation-covariates /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Testing_Cov_file.txt \
+  --patient-col sampleid \
+  --labels cad,bc,T2D \
+  --covariates sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd \
+  --eligibility-config configs/disease_eligibility.yaml \
+  --eval-size 1000 \
+  --n-repeats 1000 \
+  --seed 42 \
+  --validation-phenotype-out data/processed/official_validation_phenotype.csv \
+  --out-dir outputs/official_validation_baseline
 ```
+
+The official validation cohort is defined by
+`training_phase/phenotype_files/Testing_Cov_file.txt`. The released labels are
+read from `holdout_phase/phenotype_files/Training_Phase_Cov_file_with_Phenotype.txt`
+and joined by `sampleid`. If a per-patient PRS table is available, pass it with
+`--prs-scores`; columns named `prs_cad`, `prs_bc`, and `prs_T2D` are included in
+the disease-specific full logistic model.
 
 After the common summary-statistics layer has produced `harmonized/*.tsv.gz`, prepare
 fold-aware P+T task scripts. The generated tasks use training-fold samples for LD
@@ -124,9 +139,11 @@ If summary statistics are official and independent of the competition training l
 
 ## Validation
 
-Disease-specific eligibility rules are configured in `configs/disease_eligibility.yaml`. Breast cancer CV is restricted to eligible female patients; sex is not used as an extra BC split target. `scripts/run_cv.py` writes `eligibility_counts.csv` so the filtered analysis set is auditable.
+Disease-specific eligibility rules are configured in `configs/disease_eligibility.yaml`. Breast cancer validation is restricted to eligible female patients. `scripts/run_official_validation.py` writes `eligibility_counts.csv` so the filtered analysis set is auditable.
 
-Use the same disease-specific 5 folds for every method compared within that disease. Select models primarily by the challenge OR: the odds ratio comparing the top 10% of full-model predictions against the lower 90%. Use Nagelkerke's R2 as the secondary challenge metric, and keep AUC, AUPRC, Brier score, PRS per-standard-deviation odds ratio, and older risk-stratification odds ratios as supporting diagnostics.
+The default validation strategy is repeated holdout on the official validation set: sample 1000 patients for prediction, fit on the remaining validation patients, and repeat 1000 times per disease. Sampling is label-stratified by default. Select models primarily by the mean challenge OR across repeats: the odds ratio comparing the top 10% of full-model predictions against the lower 90%. Use mean Nagelkerke's R2 as the secondary challenge metric, and keep AUC, AUPRC, Brier score, PRS per-standard-deviation odds ratio, and older risk-stratification odds ratios as supporting diagnostics.
+
+The older disease-specific 5-fold scripts remain in the repository for sensitivity checks and for workflows that need fold-aware PRS generation, but they are no longer the primary validation path now that the official validation labels are available.
 
 ## GitHub Hygiene
 

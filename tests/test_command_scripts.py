@@ -676,3 +676,88 @@ def test_run_cv_accepts_disease_specific_splits(tmp_path):
     oof = pd.read_csv(out_dir / "oof_predictions.csv")
     assert set(oof["disease"]) == {"cad", "T2D"}
     assert len(oof) == 100
+
+
+def test_run_official_validation_repeats_holdout_sampling(tmp_path):
+    labelled = tmp_path / "released_labels.tsv"
+    validation_covariates = tmp_path / "testing_covariates.tsv"
+    prs_scores = tmp_path / "prs_scores.csv"
+    out_dir = tmp_path / "official_validation"
+    rows = []
+    cov_rows = []
+    score_rows = []
+    for i in range(60):
+        patient = f"V{i:03d}"
+        label = i % 2
+        rows.append(
+            {
+                "sampleid": patient,
+                "cad": label,
+                "age": float(i),
+            }
+        )
+        cov_rows.append(
+            {
+                "sampleid": patient,
+                "age": float(i),
+            }
+        )
+        score_rows.append(
+            {
+                "sampleid": patient,
+                "prs_cad": float(label + (i % 5) / 10),
+            }
+        )
+    rows.append({"sampleid": "TRAIN_ONLY", "cad": 1, "age": 999.0})
+    pd.DataFrame(rows).to_csv(labelled, sep="\t", index=False)
+    pd.DataFrame(cov_rows).to_csv(validation_covariates, sep="\t", index=False)
+    pd.DataFrame(score_rows).to_csv(prs_scores, index=False)
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_official_validation.py",
+            "--labelled-phenotype",
+            str(labelled),
+            "--validation-covariates",
+            str(validation_covariates),
+            "--patient-col",
+            "sampleid",
+            "--labels",
+            "cad",
+            "--covariates",
+            "age",
+            "--prs-scores",
+            str(prs_scores),
+            "--eval-size",
+            "20",
+            "--n-repeats",
+            "4",
+            "--seed",
+            "11",
+            "--validation-phenotype-out",
+            str(out_dir / "validation_phenotype.csv"),
+            "--out-dir",
+            str(out_dir),
+        ],
+        check=True,
+    )
+
+    validation_phenotype = pd.read_csv(out_dir / "validation_phenotype.csv")
+    assert len(validation_phenotype) == 60
+    assert "TRAIN_ONLY" not in set(validation_phenotype["sampleid"])
+
+    repeat_metrics = pd.read_csv(out_dir / "repeat_metrics.csv")
+    assert set(repeat_metrics["method"]) == {"covariate_only", "prs_covariate_cad"}
+    assert len(repeat_metrics) == 8
+    assert repeat_metrics["repeat"].max() == 3
+    assert set(repeat_metrics["n"]) == {20}
+
+    split_summary = pd.read_csv(out_dir / "repeat_split_summary.csv")
+    assert len(split_summary) == 4
+    assert set(split_summary["n_fit"]) == {40}
+    assert set(split_summary["n_prediction"]) == {20}
+
+    summary = pd.read_csv(out_dir / "summary_metrics.csv")
+    assert set(summary["method"]) == {"covariate_only", "prs_covariate_cad"}
+    assert set(summary["n_repeats"]) == {4}

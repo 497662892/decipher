@@ -8,6 +8,9 @@ paths:
   data_processed: data/processed
   outputs: outputs
   models: models
+  official_labelled_phenotype: /gpfs/data/deciphEHRlab/deciphEHRdream/holdout_phase/phenotype_files/Training_Phase_Cov_file_with_Phenotype.txt
+  official_validation_covariates: /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Testing_Cov_file.txt
+  official_validation_phenotype: data/processed/official_validation_phenotype.csv
 
 columns:
   patient_id: sampleid
@@ -34,5 +37,9 @@ prs:
   clump_r2_thresholds: [0.2, 0.4, 0.6, 0.8]
 
 evaluation:
+  strategy: official_repeated_holdout
+  eval_size: 1000
+  n_repeats: 1000
+  stratify_labels: true
   primary_metric: top10_vs_lower90_or
   secondary_metric: nagelkerke_r2
