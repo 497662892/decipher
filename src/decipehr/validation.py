@@ -81,6 +81,27 @@ def iter_repeated_holdout_indices(
             yield repeat, fit_idx, eval_idx
 
 
+def iter_bootstrap_indices(
+    n: int,
+    n_resamples: int,
+    seed: int = 42,
+    sample_size: int | None = None,
+) -> Iterator[tuple[int, np.ndarray]]:
+    """Yield bootstrap index vectors sampled with replacement."""
+    if n < 1:
+        raise ValueError("n must be at least 1")
+    if n_resamples < 1:
+        raise ValueError("n_resamples must be at least 1")
+    if sample_size is None:
+        sample_size = n
+    if sample_size < 1:
+        raise ValueError("sample_size must be at least 1")
+
+    rng = np.random.default_rng(seed)
+    for repeat in range(n_resamples):
+        yield repeat, rng.integers(0, n, size=sample_size)
+
+
 def summarize_repeated_metrics(
     metrics: pd.DataFrame,
     group_cols: list[str],

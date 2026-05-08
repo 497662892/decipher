@@ -31,20 +31,20 @@ External PRS tools are not installed by `uv` and should be managed separately: `
 1. Extract the competition contract from `DREAM_data_V1.pdf`, `04_09 decipEHR project.pdf`, and existing notebooks.
 2. Inventory and standardize official/provided summary statistics.
 3. Use the newly released official validation labels for model comparison.
-4. For each disease, repeat this validation procedure 1000 times: sample 1000 official validation patients for prediction, fit the full logistic regression model on the remaining validation patients, and score the sampled patients only.
-5. Select the final model from the repeated-holdout validation summaries before generating the official submission.
+4. For each disease, fit the logistic model once on the original training phenotype, predict all official validation patients, and estimate OR/Nagelkerke R2 with 1000 bootstrap resamples of the prediction table.
+5. For final holdout submission, retrain PRS generation and PRS-based logistic models on the combined training+validation labelled phenotype, then score the holdout set.
 
 ```bash
 uv run python scripts/inventory_sumstats.py --root data/raw --out data/processed/sumstats_inventory.csv
 uv run python scripts/run_official_validation.py \
+  --train-phenotype /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Training_Cov_file.txt \
   --labelled-phenotype /gpfs/data/deciphEHRlab/deciphEHRdream/holdout_phase/phenotype_files/Training_Phase_Cov_file_with_Phenotype.txt \
   --validation-covariates /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Testing_Cov_file.txt \
   --patient-col sampleid \
   --labels cad,bc,T2D \
   --covariates sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd \
   --eligibility-config configs/disease_eligibility.yaml \
-  --eval-size 1000 \
-  --n-repeats 1000 \
+  --n-bootstraps 1000 \
   --seed 42 \
   --validation-phenotype-out data/processed/official_validation_phenotype.csv \
   --out-dir outputs/official_validation_baseline
@@ -53,14 +53,15 @@ uv run python scripts/run_official_validation.py \
 The official validation cohort is defined by
 `training_phase/phenotype_files/Testing_Cov_file.txt`. The released labels are
 read from `holdout_phase/phenotype_files/Training_Phase_Cov_file_with_Phenotype.txt`
-and joined by `sampleid`. If a selected per-patient PRS table is available, pass
-it with `--prs-scores`; columns named `prs_cad`, `prs_bc`, and `prs_T2D` are
-included in the disease-specific full logistic model. For PRS grids, pass a long
-table with `--prs-long-scores`.
+and joined by `sampleid`. If selected per-patient PRS tables are available, pass
+training scores with `--train-prs-scores` and validation scores with
+`--prs-scores`; columns named `prs_cad`, `prs_bc`, and `prs_T2D` are included in
+the disease-specific full logistic model. For PRS grids, pass training and
+validation long tables with `--train-prs-long-scores` and `--prs-long-scores`.
 
-PRS models should now be built on the full official training set, not on
-fold-specific CV training subsets. For P+T, use `labeled_train.keep.psam` for LD
-clumping/model construction and score the official validation samples:
+For validation, PRS models should be built on the full original training set,
+not on fold-specific CV training subsets. For P+T, use `labeled_train.keep.psam`
+for LD clumping/model construction and score the official validation samples:
 
 ```bash
 uv run python scripts/write_pt_full_train_commands.py \
@@ -81,10 +82,15 @@ uv run python scripts/collect_pt_scores.py \
 uv run python scripts/run_official_validation.py \
   --labels cad \
   --covariates sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd \
+  --train-prs-long-scores outputs/pt_full_train/cad/scores/cad.pt_full_train_training_scores_long.csv \
   --prs-long-scores outputs/pt_full_train/cad/scores/cad.pt_full_train_scores_long.csv \
   --prs-param-cols clump_r2,p_threshold \
   --out-dir outputs/official_validation_pt/cad
 ```
+
+The PRS logistic evaluation needs the same PRS parameter grid scored on both the
+model-training patients and the validation patients. Generate the training-score
+long table with the same score files before running the command above.
 
 After the common summary-statistics layer has produced `harmonized/*.tsv.gz`, prepare
 fold-aware P+T task scripts. The generated tasks use training-fold samples for LD
@@ -170,7 +176,14 @@ If summary statistics are official and independent of the competition training l
 
 Disease-specific eligibility rules are configured in `configs/disease_eligibility.yaml`. Breast cancer validation is restricted to eligible female patients. `scripts/run_official_validation.py` writes `eligibility_counts.csv` so the filtered analysis set is auditable.
 
-The default validation strategy is repeated holdout on the official validation set: sample 1000 patients for prediction, fit on the remaining validation patients, and repeat 1000 times per disease. Sampling is label-stratified by default. Select models primarily by the mean challenge OR across repeats: the odds ratio comparing the top 10% of full-model predictions against the lower 90%. Use mean Nagelkerke's R2 as the secondary challenge metric, and keep AUC, AUPRC, Brier score, PRS per-standard-deviation odds ratio, and older risk-stratification odds ratios as supporting diagnostics.
+The default validation strategy fits once on the model-training phenotype, predicts
+the complete official validation set, then estimates the challenge OR and
+Nagelkerke's R2 using 1000 bootstrap resamples of those predictions. Select
+models primarily by the mean bootstrap challenge OR: the odds ratio comparing the
+top 10% of full-model predictions against the lower 90%. Use mean bootstrap
+Nagelkerke's R2 as the secondary challenge metric, and keep AUC, AUPRC, Brier
+score, PRS per-standard-deviation odds ratio, and older risk-stratification odds
+ratios as supporting diagnostics.
 
 The older disease-specific 5-fold scripts remain in the repository for sensitivity checks and for workflows that need fold-aware PRS generation, but they are no longer the primary validation path now that the official validation labels are available.
 

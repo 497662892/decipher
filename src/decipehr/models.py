@@ -53,6 +53,7 @@ def fit_predict_logistic(
     patient_col: str = "patient_id",
     method: str = "logistic",
     fold: int = 0,
+    class_weight: str | dict[int, float] | None = "balanced",
 ) -> FoldPrediction:
     require_columns(train, [patient_col, label_col, *feature_cols], "train")
     require_columns(val, [patient_col, label_col, *feature_cols], "validation")
@@ -63,7 +64,7 @@ def fit_predict_logistic(
             ("features", _feature_pipeline(train, feature_cols)),
             (
                 "model",
-                LogisticRegression(max_iter=2000, solver="lbfgs", class_weight="balanced"),
+                LogisticRegression(max_iter=2000, solver="lbfgs", class_weight=class_weight),
             ),
         ]
     )
@@ -80,4 +81,3 @@ def fit_predict_logistic(
         }
     )
     return FoldPrediction(fold, label_col, method, pred)
-

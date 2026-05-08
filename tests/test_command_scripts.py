@@ -776,14 +776,38 @@ def test_run_cv_accepts_disease_specific_splits(tmp_path):
     assert len(oof) == 100
 
 
-def test_run_official_validation_repeats_holdout_sampling(tmp_path):
+def test_run_official_validation_fits_training_and_bootstraps_validation(tmp_path):
+    train = tmp_path / "train.tsv"
     labelled = tmp_path / "released_labels.tsv"
     validation_covariates = tmp_path / "testing_covariates.tsv"
-    prs_scores = tmp_path / "prs_scores_long.csv"
+    train_prs_scores = tmp_path / "train_prs_scores_long.csv"
+    validation_prs_scores = tmp_path / "validation_prs_scores_long.csv"
     out_dir = tmp_path / "official_validation"
+    train_rows = []
     rows = []
     cov_rows = []
-    score_rows = []
+    train_score_rows = []
+    validation_score_rows = []
+    for i in range(40):
+        patient = f"T{i:03d}"
+        label = i % 2
+        train_rows.append(
+            {
+                "sampleid": patient,
+                "cad": label,
+                "age": float(i),
+            }
+        )
+        train_score_rows.append(
+            {
+                "sampleid": patient,
+                "disease": "cad",
+                "model_scope": "full_train",
+                "clump_r2": 0.2,
+                "p_threshold": 1.0,
+                "prs": float(label + (i % 5) / 10),
+            }
+        )
     for i in range(60):
         patient = f"V{i:03d}"
         label = i % 2
@@ -800,7 +824,7 @@ def test_run_official_validation_repeats_holdout_sampling(tmp_path):
                 "age": float(i),
             }
         )
-        score_rows.append(
+        validation_score_rows.append(
             {
                 "sampleid": patient,
                 "disease": "cad",
@@ -811,14 +835,18 @@ def test_run_official_validation_repeats_holdout_sampling(tmp_path):
             }
         )
     rows.append({"sampleid": "TRAIN_ONLY", "cad": 1, "age": 999.0})
+    pd.DataFrame(train_rows).to_csv(train, sep="\t", index=False)
     pd.DataFrame(rows).to_csv(labelled, sep="\t", index=False)
     pd.DataFrame(cov_rows).to_csv(validation_covariates, sep="\t", index=False)
-    pd.DataFrame(score_rows).to_csv(prs_scores, index=False)
+    pd.DataFrame(train_score_rows).to_csv(train_prs_scores, index=False)
+    pd.DataFrame(validation_score_rows).to_csv(validation_prs_scores, index=False)
 
     subprocess.run(
         [
             sys.executable,
             "scripts/run_official_validation.py",
+            "--train-phenotype",
+            str(train),
             "--labelled-phenotype",
             str(labelled),
             "--validation-covariates",
@@ -829,13 +857,13 @@ def test_run_official_validation_repeats_holdout_sampling(tmp_path):
             "cad",
             "--covariates",
             "age",
+            "--train-prs-long-scores",
+            str(train_prs_scores),
             "--prs-long-scores",
-            str(prs_scores),
+            str(validation_prs_scores),
             "--prs-param-cols",
             "clump_r2,p_threshold",
-            "--eval-size",
-            "20",
-            "--n-repeats",
+            "--n-bootstraps",
             "4",
             "--seed",
             "11",
@@ -851,19 +879,27 @@ def test_run_official_validation_repeats_holdout_sampling(tmp_path):
     assert len(validation_phenotype) == 60
     assert "TRAIN_ONLY" not in set(validation_phenotype["sampleid"])
 
+    point_metrics = pd.read_csv(out_dir / "point_metrics.csv")
+    assert set(point_metrics["method"]) == {"covariate_only", "prs_covariate_cad"}
+    assert set(point_metrics["n"]) == {60}
+
+    bootstrap_metrics = pd.read_csv(out_dir / "bootstrap_metrics.csv")
     repeat_metrics = pd.read_csv(out_dir / "repeat_metrics.csv")
-    assert set(repeat_metrics["method"]) == {"covariate_only", "prs_covariate_cad"}
-    assert len(repeat_metrics) == 8
-    assert repeat_metrics["repeat"].max() == 3
-    assert set(repeat_metrics["n"]) == {20}
-    prs_metrics = repeat_metrics.loc[repeat_metrics["method"] == "prs_covariate_cad"]
+    pd.testing.assert_frame_equal(bootstrap_metrics, repeat_metrics)
+    assert set(bootstrap_metrics["method"]) == {"covariate_only", "prs_covariate_cad"}
+    assert len(bootstrap_metrics) == 8
+    assert bootstrap_metrics["repeat"].max() == 3
+    assert set(bootstrap_metrics["n"]) == {60}
+    prs_metrics = bootstrap_metrics.loc[bootstrap_metrics["method"] == "prs_covariate_cad"]
     assert set(prs_metrics["clump_r2"]) == {0.2}
     assert set(prs_metrics["p_threshold"]) == {1.0}
 
-    split_summary = pd.read_csv(out_dir / "repeat_split_summary.csv")
-    assert len(split_summary) == 4
-    assert set(split_summary["n_fit"]) == {40}
-    assert set(split_summary["n_prediction"]) == {20}
+    fit_summary = pd.read_csv(out_dir / "fit_prediction_summary.csv")
+    assert set(fit_summary["n_fit"]) == {40}
+    assert set(fit_summary["n_prediction"]) == {60}
+
+    bootstrap_samples = pd.read_csv(out_dir / "bootstrap_sample_summary.csv")
+    assert set(bootstrap_samples["bootstrap_n"]) == {60}
 
     summary = pd.read_csv(out_dir / "summary_metrics.csv")
     assert set(summary["method"]) == {"covariate_only", "prs_covariate_cad"}

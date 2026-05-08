@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 from decipehr.validation import (
+    iter_bootstrap_indices,
     iter_repeated_holdout_indices,
     prepare_official_validation_phenotype,
     summarize_repeated_metrics,
@@ -71,6 +72,16 @@ def test_iter_repeated_holdout_indices_respects_eval_size_and_repeats():
         assert len(fit_idx) == 30
         assert set(fit_idx).isdisjoint(set(eval_idx))
         assert frame.iloc[eval_idx]["cad"].sum() == 5
+
+
+def test_iter_bootstrap_indices_resamples_with_replacement():
+    samples = list(iter_bootstrap_indices(n=5, n_resamples=3, seed=7))
+
+    assert [repeat for repeat, _ in samples] == [0, 1, 2]
+    for _, indices in samples:
+        assert len(indices) == 5
+        assert indices.min() >= 0
+        assert indices.max() < 5
 
 
 def test_summarize_repeated_metrics_flattens_repeat_statistics():

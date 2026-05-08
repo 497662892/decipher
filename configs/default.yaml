@@ -39,9 +39,8 @@ prs:
   clump_r2_thresholds: [0.2, 0.4, 0.6, 0.8]
 
 evaluation:
-  strategy: official_repeated_holdout
-  eval_size: 1000
-  n_repeats: 1000
-  stratify_labels: true
+  strategy: official_bootstrap_holdout
+  n_bootstraps: 1000
+  bootstrap_size: null
   primary_metric: top10_vs_lower90_or
   secondary_metric: nagelkerke_r2
