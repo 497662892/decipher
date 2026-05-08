@@ -14,19 +14,24 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Collect PLINK2 P+T .sscore files.")
     parser.add_argument("--task-manifest", required=True)
     parser.add_argument("--patient-col", default="sampleid")
+    parser.add_argument(
+        "--sscore-column",
+        default="sscore",
+        help="Manifest column containing the PLINK2 .sscore path to collect.",
+    )
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
     manifest = read_table(args.task_manifest)
     require_columns(
         manifest,
-        ["disease", "clump_r2", "p_thresholds", "sscore"],
+        ["disease", "clump_r2", "p_thresholds", args.sscore_column],
         "P+T task manifest",
     )
 
     rows = []
     for task in manifest.to_dict("records"):
-        sscore = Path(task["sscore"])
+        sscore = Path(task[args.sscore_column])
         if not sscore.exists() or sscore.stat().st_size == 0:
             raise FileNotFoundError(f"Missing PLINK2 score output: {sscore}")
         p_thresholds = [float(value) for value in str(task["p_thresholds"]).split(",") if value]

@@ -79,6 +79,11 @@ uv run python scripts/collect_pt_scores.py \
   --task-manifest outputs/pt_full_train/cad/commands/cad.pt_full_train.tasks.csv \
   --out outputs/pt_full_train/cad/scores/cad.pt_full_train_scores_long.csv
 
+uv run python scripts/collect_pt_scores.py \
+  --task-manifest outputs/pt_full_train/cad/commands/cad.pt_full_train.tasks.csv \
+  --sscore-column fit_sscore \
+  --out outputs/pt_full_train/cad/scores/cad.pt_full_train_training_scores_long.csv
+
 uv run python scripts/run_official_validation.py \
   --labels cad \
   --covariates sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd \

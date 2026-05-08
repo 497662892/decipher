@@ -46,6 +46,7 @@ GENOTYPE_PREFIX="${GENOTYPE_PREFIX:-outputs/genotype_qc/qc_final/all_chromosomes
 HARMONIZED_DIR="${HARMONIZED_DIR:-data/processed/sumstats/harmonized}"
 TRAIN_KEEP="${TRAIN_KEEP:-data/processed/sample_sets/labeled_train.keep.psam}"
 SCORE_KEEP="${SCORE_KEEP:-data/processed/sample_sets/unlabelled_validation.keep.psam}"
+FIT_SCORE_KEEP="${FIT_SCORE_KEEP:-$TRAIN_KEEP}"
 OUT_DIR="${OUT_DIR:-outputs/pt_full_train}"
 PLINK2="${PLINK2:-plink2}"
 P_THRESHOLDS="${P_THRESHOLDS:-1,0.5,0.05,0.0005,0.000005,0.00000005}"
@@ -66,6 +67,7 @@ mkdir -p "$UV_CACHE_DIR" "$OUT_DIR/$DISEASE/commands" "logs/pt_full_train"
       --harmonized-dir "$HARMONIZED_DIR" \
       --train-keep "$TRAIN_KEEP" \
       --score-keep "$SCORE_KEEP" \
+      --fit-score-keep "$FIT_SCORE_KEEP" \
       --out-dir "$OUT_DIR" \
       --plink2 "$PLINK2" \
       --p-thresholds "$P_THRESHOLDS" \

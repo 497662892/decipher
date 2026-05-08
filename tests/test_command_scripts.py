@@ -406,11 +406,13 @@ def test_write_pt_full_train_commands_generates_full_training_tasks(tmp_path):
     task_text = (out_dir / "cad" / "tasks" / "cad.full_train.r20p2.sh").read_text(encoding="utf-8")
     assert f"--keep {train_keep}" in task_text
     assert f"--keep {score_keep}" in task_text
-    assert "--score-col-nums 3 4" in task_text
+    assert task_text.count("--score-col-nums 3 4") == 2
     manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.pt_full_train.tasks.csv")
     assert manifest_out[["disease", "model_scope", "clump_r2"]].to_dict("records") == [
         {"disease": "cad", "model_scope": "full_train", "clump_r2": 0.2}
     ]
+    assert manifest_out["fit_score_keep"].tolist() == [str(train_keep)]
+    assert manifest_out["fit_sscore"].str.endswith(".fit.sscore").all()
 
 
 def test_write_ldpred2_cv_commands_generates_fold_aware_array_tasks(tmp_path):
@@ -573,6 +575,11 @@ def test_collect_pt_scores_maps_full_train_sscore(tmp_path):
         "#IID BETA_p1_SUM BETA_p0p05_SUM\nV1 0.1 0.2\nV2 -0.1 -0.2\n",
         encoding="utf-8",
     )
+    fit_sscore = tmp_path / "full.fit.sscore"
+    fit_sscore.write_text(
+        "#IID BETA_p1_SUM BETA_p0p05_SUM\nT1 0.3 0.4\nT2 -0.3 -0.4\n",
+        encoding="utf-8",
+    )
     manifest = tmp_path / "tasks.csv"
     pd.DataFrame(
         {
@@ -581,6 +588,7 @@ def test_collect_pt_scores_maps_full_train_sscore(tmp_path):
             "clump_r2": [0.2],
             "p_thresholds": ["1,0.05"],
             "sscore": [str(sscore)],
+            "fit_sscore": [str(fit_sscore)],
         }
     ).to_csv(manifest, index=False)
     out = tmp_path / "scores.csv"
@@ -603,6 +611,31 @@ def test_collect_pt_scores_maps_full_train_sscore(tmp_path):
         {"sampleid": "V2", "model_scope": "full_train", "clump_r2": 0.2, "p_threshold": 1.0, "prs": -0.1},
         {"sampleid": "V1", "model_scope": "full_train", "clump_r2": 0.2, "p_threshold": 0.05, "prs": 0.2},
         {"sampleid": "V2", "model_scope": "full_train", "clump_r2": 0.2, "p_threshold": 0.05, "prs": -0.2},
+    ]
+
+    fit_out = tmp_path / "fit_scores.csv"
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/collect_pt_scores.py",
+            "--task-manifest",
+            str(manifest),
+            "--sscore-column",
+            "fit_sscore",
+            "--out",
+            str(fit_out),
+        ],
+        check=True,
+    )
+
+    fit_scores = pd.read_csv(fit_out)
+    assert fit_scores[["sampleid", "model_scope", "clump_r2", "p_threshold", "prs"]].to_dict(
+        "records"
+    ) == [
+        {"sampleid": "T1", "model_scope": "full_train", "clump_r2": 0.2, "p_threshold": 1.0, "prs": 0.3},
+        {"sampleid": "T2", "model_scope": "full_train", "clump_r2": 0.2, "p_threshold": 1.0, "prs": -0.3},
+        {"sampleid": "T1", "model_scope": "full_train", "clump_r2": 0.2, "p_threshold": 0.05, "prs": 0.4},
+        {"sampleid": "T2", "model_scope": "full_train", "clump_r2": 0.2, "p_threshold": 0.05, "prs": -0.4},
     ]
 
 

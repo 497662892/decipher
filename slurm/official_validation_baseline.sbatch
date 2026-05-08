@@ -32,17 +32,19 @@ export PYTHONPATH="$REPO_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-outputs/uv-cache}"
 
 LABELLED_PHENOTYPE="${LABELLED_PHENOTYPE:-/gpfs/data/deciphEHRlab/deciphEHRdream/holdout_phase/phenotype_files/Training_Phase_Cov_file_with_Phenotype.txt}"
+TRAIN_PHENOTYPE="${TRAIN_PHENOTYPE:-/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Training_Cov_file.txt}"
 VALIDATION_COVARIATES="${VALIDATION_COVARIATES:-/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Testing_Cov_file.txt}"
 PATIENT_COL="${PATIENT_COL:-sampleid}"
 LABELS="${LABELS:-cad,bc,T2D}"
 COVARIATES="${COVARIATES:-sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd}"
 ELIGIBILITY_CONFIG="${ELIGIBILITY_CONFIG:-configs/disease_eligibility.yaml}"
-EVAL_SIZE="${EVAL_SIZE:-1000}"
-N_REPEATS="${N_REPEATS:-1000}"
+N_BOOTSTRAPS="${N_BOOTSTRAPS:-1000}"
 SEED="${SEED:-42}"
 OUT_DIR="${OUT_DIR:-outputs/official_validation_baseline}"
 VALIDATION_PHENOTYPE_OUT="${VALIDATION_PHENOTYPE_OUT:-data/processed/official_validation_phenotype.csv}"
+TRAIN_PRS_SCORES="${TRAIN_PRS_SCORES:-}"
 PRS_SCORES="${PRS_SCORES:-}"
+TRAIN_PRS_LONG_SCORES="${TRAIN_PRS_LONG_SCORES:-}"
 PRS_LONG_SCORES="${PRS_LONG_SCORES:-}"
 PRS_PARAM_COLS="${PRS_PARAM_COLS:-clump_r2,p_threshold}"
 
@@ -50,31 +52,37 @@ mkdir -p "$OUT_DIR" "$(dirname "$VALIDATION_PHENOTYPE_OUT")" "$UV_CACHE_DIR" log
 
 cmd=(
   uv run --extra dev python scripts/run_official_validation.py
+  --train-phenotype "$TRAIN_PHENOTYPE"
   --labelled-phenotype "$LABELLED_PHENOTYPE"
   --validation-covariates "$VALIDATION_COVARIATES"
   --patient-col "$PATIENT_COL"
   --labels "$LABELS"
   --covariates "$COVARIATES"
   --eligibility-config "$ELIGIBILITY_CONFIG"
-  --eval-size "$EVAL_SIZE"
-  --n-repeats "$N_REPEATS"
+  --n-bootstraps "$N_BOOTSTRAPS"
   --seed "$SEED"
   --validation-phenotype-out "$VALIDATION_PHENOTYPE_OUT"
   --out-dir "$OUT_DIR"
 )
 
+if [[ -n "$TRAIN_PRS_SCORES" ]]; then
+  cmd+=(--train-prs-scores "$TRAIN_PRS_SCORES")
+fi
 if [[ -n "$PRS_SCORES" ]]; then
   cmd+=(--prs-scores "$PRS_SCORES")
+fi
+if [[ -n "$TRAIN_PRS_LONG_SCORES" ]]; then
+  cmd+=(--train-prs-long-scores "$TRAIN_PRS_LONG_SCORES")
 fi
 if [[ -n "$PRS_LONG_SCORES" ]]; then
   cmd+=(--prs-long-scores "$PRS_LONG_SCORES" --prs-param-cols "$PRS_PARAM_COLS")
 fi
 
-echo "Started official validation repeated holdout at $(date)"
+echo "Started official validation bootstrap scoring at $(date)"
+echo "Train phenotype: $TRAIN_PHENOTYPE"
 echo "Labelled phenotype: $LABELLED_PHENOTYPE"
 echo "Validation covariates: $VALIDATION_COVARIATES"
-echo "Eval size: $EVAL_SIZE"
-echo "Repeats: $N_REPEATS"
+echo "Bootstrap resamples: $N_BOOTSTRAPS"
 echo "Output: $OUT_DIR"
 "${cmd[@]}"
-echo "Finished official validation repeated holdout at $(date)"
+echo "Finished official validation bootstrap scoring at $(date)"

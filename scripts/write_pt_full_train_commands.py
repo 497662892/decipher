@@ -45,10 +45,12 @@ def _task_script(
     harmonized: Path,
     train_keep: Path,
     score_keep: Path,
+    fit_score_keep: Path | None,
     clump_prefix: Path,
     score_file: Path,
     score_summary: Path,
     score_prefix: Path,
+    fit_score_prefix: Path | None,
     window_kb: int,
     threads: int,
 ) -> str:
@@ -67,6 +69,13 @@ def _task_script(
             f"test -s {q(harmonized)} || {{ echo 'Missing harmonized sumstats: {harmonized}' >&2; exit 1; }}",
             f"test -s {q(train_keep)} || {{ echo 'Missing full training keep file: {train_keep}' >&2; exit 1; }}",
             f"test -s {q(score_keep)} || {{ echo 'Missing scoring keep file: {score_keep}' >&2; exit 1; }}",
+            *(
+                [
+                    f"test -s {q(fit_score_keep)} || {{ echo 'Missing model-fit scoring keep file: {fit_score_keep}' >&2; exit 1; }}"
+                ]
+                if fit_score_keep is not None
+                else []
+            ),
             "",
             f"if [[ ! -s {q(str(clump_prefix) + '.clumps')} || \"${{REUSE_CLUMPS:-0}}\" != \"1\" ]]; then",
             (
@@ -94,6 +103,18 @@ def _task_script(
                 f"--score-col-nums {score_cols} "
                 f"--threads \"${{SLURM_CPUS_PER_TASK:-{threads}}}\" --out {q(score_prefix)}"
             ),
+            *(
+                [
+                    (
+                        f"{q(plink2)} --pfile {q(genotype_prefix)} --keep {q(fit_score_keep)} "
+                        f"--score {q(score_file)} 1 2 header-read cols=+scoresums "
+                        f"--score-col-nums {score_cols} "
+                        f"--threads \"${{SLURM_CPUS_PER_TASK:-{threads}}}\" --out {q(fit_score_prefix)}"
+                    )
+                ]
+                if fit_score_keep is not None and fit_score_prefix is not None
+                else []
+            ),
             f"echo 'Finished full-train P+T task disease={disease} r2={r2_threshold:g} at '$(date)",
             "",
         ]
@@ -111,6 +132,11 @@ def main() -> None:
     parser.add_argument("--harmonized-dir", default="data/processed/sumstats/harmonized")
     parser.add_argument("--train-keep", default="data/processed/sample_sets/labeled_train.keep.psam")
     parser.add_argument("--score-keep", default="data/processed/sample_sets/unlabelled_validation.keep.psam")
+    parser.add_argument(
+        "--fit-score-keep",
+        default=None,
+        help="Optional keep file to score for fitting PRS logistic models. Defaults to --train-keep.",
+    )
     parser.add_argument("--out-dir", default="outputs/pt_full_train")
     parser.add_argument("--plink2", default="plink2")
     parser.add_argument("--p-thresholds", default=DEFAULT_P_THRESHOLDS)
@@ -144,6 +170,7 @@ def main() -> None:
     genotype_prefix = Path(args.genotype_prefix)
     train_keep = Path(args.train_keep)
     score_keep = Path(args.score_keep)
+    fit_score_keep = Path(args.fit_score_keep) if args.fit_score_keep else train_keep
     for _, row in grid.iterrows():
         r2_threshold = float(row.clump_r2)
         tag = r2_tag(r2_threshold)
@@ -151,6 +178,7 @@ def main() -> None:
         score_file = scorefile_dir / f"{args.disease}.full_train.{tag}.score.tsv"
         score_summary = scorefile_dir / f"{args.disease}.full_train.{tag}.score.summary.json"
         score_prefix = score_dir / f"{args.disease}.full_train.{tag}"
+        fit_score_prefix = score_dir / f"{args.disease}.full_train.{tag}.fit"
         task_script = task_dir / f"{args.disease}.full_train.{tag}.sh"
         task_script.write_text(
             _task_script(
@@ -162,10 +190,12 @@ def main() -> None:
                 harmonized=harmonized,
                 train_keep=train_keep,
                 score_keep=score_keep,
+                fit_score_keep=fit_score_keep,
                 clump_prefix=clump_prefix,
                 score_file=score_file,
                 score_summary=score_summary,
                 score_prefix=score_prefix,
+                fit_score_prefix=fit_score_prefix,
                 window_kb=args.window_kb,
                 threads=args.threads,
             ),
@@ -183,10 +213,12 @@ def main() -> None:
                 "task_script": str(task_script),
                 "train_keep": str(train_keep),
                 "score_keep": str(score_keep),
+                "fit_score_keep": str(fit_score_keep),
                 "clumps": str(clump_prefix) + ".clumps",
                 "score_file": str(score_file),
                 "score_summary": str(score_summary),
                 "sscore": str(score_prefix) + ".sscore",
+                "fit_sscore": str(fit_score_prefix) + ".sscore",
             }
         )
 
