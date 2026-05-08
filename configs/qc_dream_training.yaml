@@ -1,0 +1,41 @@
+variant_qc:
+  min_info: 0.8
+  min_maf: 0.01
+  max_af: 0.99
+  max_variant_missingness: 0.05
+  genotype_missingness_mode: dosage
+  keep_snps_only: true
+  biallelic_only: true
+  info_score:
+    variant_col: col0
+    info_col: info_IMPUTE
+    freq_col: MAF
+    freq_is_maf: true
+  apply_hwe: false
+  hwe_p: 1e-6
+  controls_keep_file: null
+
+sample_qc:
+  apply_mind: false
+  max_sample_missingness: 0.02
+  keep_file: null
+
+prs_alignment:
+  remove_ambiguous_snps: true
+  require_allele_match: true
+  remove_duplicate_gwas_variants: true
+  keep_only_acgt: true
+  match_strategy: id_then_position_alleles
+  allow_strand_flip: false
+  strand_flip_requires_frequency_check: true
+  max_frequency_diff_for_flip: 0.15
+
+paths:
+  plink2: plink2
+  raw_pgen_dir: /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/genotype_files/plink_files
+  raw_pgen_pattern: Testing_Chr{chr}
+  info_score_dir: /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/supplementary_files/info_scores
+  info_score_pattern: All_Samples_InfoScore_v02_chr{chr}.txt.gz
+  qc_work_dir: outputs/genotype_qc
+  gwas_sumstats: null
+  harmonized_score_dir: outputs/prs_scores

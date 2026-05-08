@@ -31,6 +31,8 @@ submissions/
 *.parquet
 
 # Logs and local secrets
+logs/
+.codex
 *.log
 .env
 .env.*

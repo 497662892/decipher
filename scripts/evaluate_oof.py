@@ -5,7 +5,12 @@ import argparse
 import pandas as pd
 
 from decipehr.io import read_table, write_table
-from decipehr.metrics import binary_metrics, odds_ratio_per_sd, risk_stratification_or
+from decipehr.metrics import (
+    binary_metrics,
+    challenge_metrics,
+    odds_ratio_per_sd,
+    risk_stratification_or,
+)
 
 
 def main() -> None:
@@ -28,6 +33,7 @@ def main() -> None:
             "n": base.n,
             "or_per_sd": odds_ratio_per_sd(frame["y_true"], frame["y_prob"]),
         }
+        row.update(challenge_metrics(frame["y_true"], frame["y_prob"]))
         row.update(risk_stratification_or(frame["y_true"], frame["y_prob"]))
         rows.append(row)
     write_table(pd.DataFrame(rows), args.out)
@@ -36,4 +42,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

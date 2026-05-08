@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 
 from decipehr.io import read_table, write_table
-from decipehr.qc import label_balance, missingness_report
+from decipehr.qc import feature_count_report, feature_summary, label_balance, missingness_report
 from decipehr.schema import parse_csv_list, require_columns, validate_binary_labels, validate_unique
 
 
@@ -16,6 +16,8 @@ def main() -> None:
     parser.add_argument("--out", required=True)
     parser.add_argument("--missingness-report", default=None)
     parser.add_argument("--label-report", default=None)
+    parser.add_argument("--feature-report", default=None)
+    parser.add_argument("--feature-count-report", default=None)
     args = parser.parse_args()
 
     labels = parse_csv_list(args.labels)
@@ -29,9 +31,12 @@ def main() -> None:
         write_table(missingness_report(df), args.missingness_report)
     if args.label_report:
         write_table(label_balance(df, labels), args.label_report)
+    if args.feature_report:
+        write_table(feature_summary(df, args.patient_col, labels, covariates), args.feature_report)
+    if args.feature_count_report:
+        write_table(feature_count_report(df, args.patient_col, labels, covariates), args.feature_count_report)
     print(f"Wrote validated phenotype table to {args.out}")
 
 
 if __name__ == "__main__":
     main()
-

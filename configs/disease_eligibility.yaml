@@ -1,16 +1,10 @@
 # Disease-specific analysis eligibility.
 #
-# Update the disease key to match the exact breast-cancer label column from the
-# competition phenotype table. The values below cover common female encodings;
-# keep only the encodings that are actually present in the project data after
-# confirming `DREAM_data_V1.pdf` and the phenotype file.
+# The competition phenotype table uses `bc` for breast cancer and `Female` as
+# the eligible sex value in `Training_Cov_file.txt`.
 
 disease_eligibility:
-  breast_cancer:
+  bc:
     column: sex
     allowed_values:
-      - F
       - Female
-      - female
-      - 2
-

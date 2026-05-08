@@ -10,29 +10,29 @@ paths:
   models: models
 
 columns:
-  patient_id: patient_id
+  patient_id: sampleid
   labels:
-    - disease1
-    - disease2
-    - disease3
+    - cad
+    - bc
+    - T2D
   covariates:
-    - age
     - sex
-    - PC1
-    - PC2
-    - PC3
-    - PC4
-    - PC5
-    - PC6
-    - PC7
-    - PC8
-    - PC9
-    - PC10
+    - age_sd
+    - PC1_sd
+    - PC2_sd
+    - PC3_sd
+    - PC4_sd
+    - PC5_sd
+    - PC6_sd
+    - PC7_sd
+    - PC8_sd
+    - PC9_sd
+    - PC10_sd
 
 prs:
   pvalue_thresholds: [1.0, 0.5, 0.05, 0.0005, 0.000005, 0.00000005]
   clump_r2_thresholds: [0.2, 0.4, 0.6, 0.8]
 
 evaluation:
-  primary_metric: auc
-
+  primary_metric: top10_vs_lower90_or
+  secondary_metric: nagelkerke_r2

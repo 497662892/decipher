@@ -1,0 +1,26 @@
+summary_statistics:
+  cad:
+    file: 26343387-GCST003116-EFO_0000378.h.tsv.gz
+    accession: GCST003116
+    disease_trait: Coronary artery disease
+    efo_trait: coronary artery disorder
+    pubmed_id: 26343387
+    source: GWAS Catalog
+    variant_id_strategy: decipehr
+  bc:
+    file: GCST90479801.tsv.gz
+    accession: GCST90479801
+    disease_trait: Breast cancer [female] (PheCode 174.1)
+    efo_trait: breast cancer
+    pubmed_id: 39024449
+    source: GWAS Catalog
+    variant_id_strategy: decipehr
+    eligibility_rule: bc
+  T2D:
+    file: GCST90479885.tsv.gz
+    accession: GCST90479885
+    disease_trait: Type 2 diabetes (PheCode 250.2)
+    efo_trait: type 2 diabetes mellitus
+    pubmed_id: 39024449
+    source: GWAS Catalog
+    variant_id_strategy: decipehr

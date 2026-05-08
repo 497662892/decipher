@@ -26,9 +26,9 @@ def load_eligibility_rules(path: str | Path | None) -> dict[str, dict[str, Any]]
     Expected shape:
 
     disease_eligibility:
-      breast_cancer:
+      bc:
         column: sex
-        allowed_values: ["F", "Female", "2"]
+        allowed_values: ["Female"]
     """
     if path is None:
         return {}
@@ -76,4 +76,3 @@ def eligible_counts(
             }
         )
     return pd.DataFrame(rows)
-
