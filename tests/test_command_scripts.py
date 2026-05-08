@@ -938,3 +938,98 @@ def test_run_official_validation_fits_training_and_bootstraps_validation(tmp_pat
     assert set(summary["method"]) == {"covariate_only", "prs_covariate_cad"}
     assert set(summary["n_repeats"]) == {4}
     assert {"clump_r2", "p_threshold"} <= set(summary.columns)
+
+
+def test_validate_official_model_wraps_fixed_validation_config(tmp_path):
+    train = tmp_path / "train.tsv"
+    labelled = tmp_path / "released_labels.tsv"
+    validation_covariates = tmp_path / "testing_covariates.tsv"
+    train_prs_scores = tmp_path / "train_prs_scores_long.csv"
+    validation_prs_scores = tmp_path / "validation_prs_scores_long.csv"
+    out_dir = tmp_path / "official_validation_pt"
+    config = tmp_path / "default.yaml"
+
+    train_rows = []
+    train_score_rows = []
+    for i in range(30):
+        label = i % 2
+        patient = f"T{i:03d}"
+        train_rows.append({"sampleid": patient, "cad": label, "age": float(i)})
+        train_score_rows.append(
+            {
+                "sampleid": patient,
+                "disease": "cad",
+                "clump_r2": 0.2,
+                "p_threshold": 1.0,
+                "prs": float(label + (i % 3) / 10),
+            }
+        )
+
+    labelled_rows = []
+    covariate_rows = []
+    validation_score_rows = []
+    for i in range(40):
+        label = i % 2
+        patient = f"V{i:03d}"
+        labelled_rows.append({"sampleid": patient, "cad": label, "age": float(i)})
+        covariate_rows.append({"sampleid": patient, "age": float(i)})
+        validation_score_rows.append(
+            {
+                "sampleid": patient,
+                "disease": "cad",
+                "clump_r2": 0.2,
+                "p_threshold": 1.0,
+                "prs": float(label + (i % 3) / 10),
+            }
+        )
+    labelled_rows.append({"sampleid": "TRAIN_ONLY", "cad": 1, "age": 999.0})
+
+    pd.DataFrame(train_rows).to_csv(train, sep="\t", index=False)
+    pd.DataFrame(labelled_rows).to_csv(labelled, sep="\t", index=False)
+    pd.DataFrame(covariate_rows).to_csv(validation_covariates, sep="\t", index=False)
+    pd.DataFrame(train_score_rows).to_csv(train_prs_scores, index=False)
+    pd.DataFrame(validation_score_rows).to_csv(validation_prs_scores, index=False)
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "project": {"seed": 11},
+                "paths": {
+                    "official_train_phenotype": str(train),
+                    "official_labelled_phenotype": str(labelled),
+                    "official_validation_covariates": str(validation_covariates),
+                    "official_validation_phenotype": str(out_dir / "validation_phenotype.csv"),
+                },
+                "columns": {
+                    "patient_id": "sampleid",
+                    "labels": ["cad"],
+                    "covariates": ["age"],
+                },
+                "evaluation": {"n_bootstraps": 3},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/validate_official_model.py",
+            "--config",
+            str(config),
+            "--model-name",
+            "pt",
+            "--train-prs-long-scores",
+            str(train_prs_scores),
+            "--validation-prs-long-scores",
+            str(validation_prs_scores),
+            "--out-dir",
+            str(out_dir),
+        ],
+        check=True,
+    )
+
+    summary = pd.read_csv(out_dir / "summary_metrics.csv")
+    assert set(summary["model_name"]) == {"pt"}
+    assert set(summary["method"]) == {"covariate_only", "prs_covariate_cad"}
+    assert set(summary["n_repeats"]) == {3}
+    assert {"clump_r2", "p_threshold"} <= set(summary.columns)

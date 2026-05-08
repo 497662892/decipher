@@ -38,6 +38,7 @@ PATIENT_COL="${PATIENT_COL:-sampleid}"
 LABELS="${LABELS:-cad,bc,T2D}"
 COVARIATES="${COVARIATES:-sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd}"
 ELIGIBILITY_CONFIG="${ELIGIBILITY_CONFIG:-configs/disease_eligibility.yaml}"
+MODEL_NAME="${MODEL_NAME:-baseline}"
 N_BOOTSTRAPS="${N_BOOTSTRAPS:-1000}"
 SEED="${SEED:-42}"
 OUT_DIR="${OUT_DIR:-outputs/official_validation_baseline}"
@@ -51,7 +52,8 @@ PRS_PARAM_COLS="${PRS_PARAM_COLS:-clump_r2,p_threshold}"
 mkdir -p "$OUT_DIR" "$(dirname "$VALIDATION_PHENOTYPE_OUT")" "$UV_CACHE_DIR" logs/official_validation
 
 cmd=(
-  uv run --extra dev python scripts/run_official_validation.py
+  uv run --extra dev python scripts/validate_official_model.py
+  --model-name "$MODEL_NAME"
   --train-phenotype "$TRAIN_PHENOTYPE"
   --labelled-phenotype "$LABELLED_PHENOTYPE"
   --validation-covariates "$VALIDATION_COVARIATES"
@@ -69,16 +71,17 @@ if [[ -n "$TRAIN_PRS_SCORES" ]]; then
   cmd+=(--train-prs-scores "$TRAIN_PRS_SCORES")
 fi
 if [[ -n "$PRS_SCORES" ]]; then
-  cmd+=(--prs-scores "$PRS_SCORES")
+  cmd+=(--validation-prs-scores "$PRS_SCORES")
 fi
 if [[ -n "$TRAIN_PRS_LONG_SCORES" ]]; then
   cmd+=(--train-prs-long-scores "$TRAIN_PRS_LONG_SCORES")
 fi
 if [[ -n "$PRS_LONG_SCORES" ]]; then
-  cmd+=(--prs-long-scores "$PRS_LONG_SCORES" --prs-param-cols "$PRS_PARAM_COLS")
+  cmd+=(--validation-prs-long-scores "$PRS_LONG_SCORES" --prs-param-cols "$PRS_PARAM_COLS")
 fi
 
 echo "Started official validation bootstrap scoring at $(date)"
+echo "Model: $MODEL_NAME"
 echo "Train phenotype: $TRAIN_PHENOTYPE"
 echo "Labelled phenotype: $LABELLED_PHENOTYPE"
 echo "Validation covariates: $VALIDATION_COVARIATES"

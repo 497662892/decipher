@@ -8,6 +8,7 @@ paths:
   data_processed: data/processed
   outputs: outputs
   models: models
+  official_train_phenotype: /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Training_Cov_file.txt
   official_labelled_phenotype: /gpfs/data/deciphEHRlab/deciphEHRdream/holdout_phase/phenotype_files/Training_Phase_Cov_file_with_Phenotype.txt
   official_validation_covariates: /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Testing_Cov_file.txt
   official_validation_phenotype: data/processed/official_validation_phenotype.csv

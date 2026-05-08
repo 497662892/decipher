@@ -36,17 +36,8 @@ External PRS tools are not installed by `uv` and should be managed separately: `
 
 ```bash
 uv run python scripts/inventory_sumstats.py --root data/raw --out data/processed/sumstats_inventory.csv
-uv run python scripts/run_official_validation.py \
-  --train-phenotype /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Training_Cov_file.txt \
-  --labelled-phenotype /gpfs/data/deciphEHRlab/deciphEHRdream/holdout_phase/phenotype_files/Training_Phase_Cov_file_with_Phenotype.txt \
-  --validation-covariates /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Testing_Cov_file.txt \
-  --patient-col sampleid \
-  --labels cad,bc,T2D \
-  --covariates sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd \
-  --eligibility-config configs/disease_eligibility.yaml \
-  --n-bootstraps 1000 \
-  --seed 42 \
-  --validation-phenotype-out data/processed/official_validation_phenotype.csv \
+uv run python scripts/validate_official_model.py \
+  --model-name baseline \
   --out-dir outputs/official_validation_baseline
 ```
 
@@ -84,12 +75,11 @@ uv run python scripts/collect_pt_scores.py \
   --sscore-column fit_sscore \
   --out outputs/pt_full_train/cad/scores/cad.pt_full_train_training_scores_long.csv
 
-uv run python scripts/run_official_validation.py \
-  --labels cad \
-  --covariates sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd \
+uv run python scripts/validate_official_model.py \
+  --model-name pt \
+  --disease cad \
   --train-prs-long-scores outputs/pt_full_train/cad/scores/cad.pt_full_train_training_scores_long.csv \
-  --prs-long-scores outputs/pt_full_train/cad/scores/cad.pt_full_train_scores_long.csv \
-  --prs-param-cols clump_r2,p_threshold \
+  --validation-prs-long-scores outputs/pt_full_train/cad/scores/cad.pt_full_train_scores_long.csv \
   --out-dir outputs/official_validation_pt/cad
 ```
 
@@ -179,7 +169,7 @@ If summary statistics are official and independent of the competition training l
 
 ## Validation
 
-Disease-specific eligibility rules are configured in `configs/disease_eligibility.yaml`. Breast cancer validation is restricted to eligible female patients. `scripts/run_official_validation.py` writes `eligibility_counts.csv` so the filtered analysis set is auditable.
+Disease-specific eligibility rules are configured in `configs/disease_eligibility.yaml`. Breast cancer validation is restricted to eligible female patients. `scripts/validate_official_model.py` is the stable entry point for official validation; it fixes the official paths, labels, covariates, eligibility rules, unweighted logistic regression, and bootstrap settings from `configs/default.yaml`. The lower-level `scripts/run_official_validation.py` writes `eligibility_counts.csv` so the filtered analysis set is auditable.
 
 The default validation strategy fits once on the model-training phenotype, predicts
 the complete official validation set, then estimates the challenge OR and

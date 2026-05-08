@@ -225,12 +225,21 @@ def _resolve_n_bootstraps(n_bootstraps: int | None, n_repeats: int | None) -> in
     return 1000
 
 
+def _model_fields(model_name: str | None) -> dict[str, str]:
+    return {"model_name": model_name} if model_name else {}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Fit logistic models once on the model-training phenotype, predict the "
             "official validation set, then estimate metrics with bootstrap resamples."
         )
+    )
+    parser.add_argument(
+        "--model-name",
+        default=None,
+        help="Optional model label copied into metric outputs for cross-model comparisons.",
     )
     parser.add_argument(
         "--train-phenotype",
@@ -383,6 +392,7 @@ def main() -> None:
     bootstrap_metric_rows = []
     bootstrap_sample_rows = []
     fit_rows = []
+    model_fields = _model_fields(args.model_name)
 
     for disease_idx, disease in enumerate(labels):
         train_data = filter_eligible(train_phenotype, disease, eligibility_rules).reset_index(drop=True)
@@ -406,11 +416,12 @@ def main() -> None:
                 patient_col=patient_col,
                 class_weight=class_weight,
             )
-            row = {"disease": disease, "method": method}
+            row = {**model_fields, "disease": disease, "method": method}
             row.update(_metrics_for_predictions(pred))
             point_rows.append(row)
             fit_rows.append(
                 {
+                    **model_fields,
                     "disease": disease,
                     "method": method,
                     "n_fit": int(len(train_data)),
@@ -427,10 +438,10 @@ def main() -> None:
                 sample_size=args.bootstrap_size,
             )
             for metric_row in rows:
-                metric_row.update({"disease": disease, "method": method})
+                metric_row.update({**model_fields, "disease": disease, "method": method})
                 bootstrap_metric_rows.append(metric_row)
             for sample_row in sample_rows:
-                sample_row.update({"disease": disease, "method": method})
+                sample_row.update({**model_fields, "disease": disease, "method": method})
                 bootstrap_sample_rows.append(sample_row)
             if args.write_predictions:
                 prediction_frames.append(pred)
@@ -474,11 +485,12 @@ def main() -> None:
             )
             for column, value in params.items():
                 pred[column] = value
-            row = {"disease": disease, "method": method, **params}
+            row = {**model_fields, "disease": disease, "method": method, **params}
             row.update(_metrics_for_predictions(pred))
             point_rows.append(row)
             fit_rows.append(
                 {
+                    **model_fields,
                     "disease": disease,
                     "method": method,
                     **params,
@@ -496,10 +508,10 @@ def main() -> None:
                 sample_size=args.bootstrap_size,
             )
             for metric_row in rows:
-                metric_row.update({"disease": disease, "method": method, **params})
+                metric_row.update({**model_fields, "disease": disease, "method": method, **params})
                 bootstrap_metric_rows.append(metric_row)
             for sample_row in sample_rows:
-                sample_row.update({"disease": disease, "method": method, **params})
+                sample_row.update({**model_fields, "disease": disease, "method": method, **params})
                 bootstrap_sample_rows.append(sample_row)
             if args.write_predictions:
                 prediction_frames.append(pred)
@@ -522,7 +534,7 @@ def main() -> None:
     validation_counts = eligible_counts(validation_phenotype, labels, eligibility_rules)
     write_table(validation_counts, out_dir / "validation_eligibility_counts.csv")
     write_table(validation_counts, out_dir / "eligibility_counts.csv")
-    summary_group_cols = ["disease", "method", *prs_param_cols]
+    summary_group_cols = ["model_name", "disease", "method", *prs_param_cols]
     present_group_cols = [col for col in summary_group_cols if col in bootstrap_metrics.columns]
     summary = summarize_repeated_metrics(bootstrap_metrics, present_group_cols)
     write_table(summary, out_dir / "summary_metrics.csv")
