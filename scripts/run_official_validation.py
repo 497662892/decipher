@@ -85,6 +85,30 @@ def _method_specs(
     return methods
 
 
+def _long_prs_groups(
+    prs_long: pd.DataFrame | None,
+    disease: str,
+    patient_col: str,
+    param_cols: list[str],
+) -> list[tuple[dict[str, object], pd.DataFrame]]:
+    if prs_long is None:
+        return []
+    disease_scores = prs_long.loc[prs_long["disease"] == disease].copy()
+    if disease_scores.empty:
+        return []
+    require_columns(disease_scores, [patient_col, "prs", *param_cols], "long PRS scores")
+    if not param_cols:
+        return [({}, disease_scores[[patient_col, "prs"]].copy())]
+
+    groups = []
+    for values, frame in disease_scores.groupby(param_cols, dropna=False, sort=True):
+        if not isinstance(values, tuple):
+            values = (values,)
+        params = dict(zip(param_cols, values, strict=True))
+        groups.append((params, frame[[patient_col, "prs"]].copy()))
+    return groups
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -103,6 +127,12 @@ def main() -> None:
     parser.add_argument("--labels", required=True)
     parser.add_argument("--covariates", default="")
     parser.add_argument("--prs-scores", default=None, help="Optional wide table with patient ID and prs_<label> columns.")
+    parser.add_argument(
+        "--prs-long-scores",
+        default=None,
+        help="Optional long table with patient ID, disease, prs, and PRS parameter columns.",
+    )
+    parser.add_argument("--prs-param-cols", default="clump_r2,p_threshold")
     parser.add_argument("--prs-prefix", default="prs_")
     parser.add_argument("--eligibility-config", default="configs/disease_eligibility.yaml")
     parser.add_argument("--eval-size", type=int, default=1000)
@@ -125,6 +155,7 @@ def main() -> None:
     patient_col = args.patient_col
     labels = parse_csv_list(args.labels)
     covariates = parse_csv_list(args.covariates)
+    prs_param_cols = parse_csv_list(args.prs_param_cols)
     phenotype = _load_validation_phenotype(
         phenotype_path=args.phenotype,
         labelled_phenotype_path=args.labelled_phenotype,
@@ -137,6 +168,10 @@ def main() -> None:
         prs = read_table(args.prs_scores)
         require_columns(prs, [patient_col], "prs_scores")
         phenotype = phenotype.merge(prs, on=patient_col, how="left", validate="one_to_one")
+    prs_long = None
+    if args.prs_long_scores:
+        prs_long = read_table(args.prs_long_scores)
+        require_columns(prs_long, [patient_col, "disease", "prs", *prs_param_cols], "long PRS scores")
 
     eligibility_rules = load_eligibility_rules(args.eligibility_config)
     out_dir = Path(args.out_dir)
@@ -172,11 +207,13 @@ def main() -> None:
                     "prediction_cases": int(disease_data.iloc[eval_idx][disease].astype(int).sum()),
                 }
             )
-            fit_data = disease_data.iloc[fit_idx].copy()
-            eval_data = disease_data.iloc[eval_idx].copy()
+            base_fit_data = disease_data.iloc[fit_idx].copy()
+            base_eval_data = disease_data.iloc[eval_idx].copy()
             for method, feature_cols, applies_to in methods:
                 if applies_to is not None and applies_to != disease:
                     continue
+                fit_data = base_fit_data.copy()
+                eval_data = base_eval_data.copy()
                 features = list(feature_cols)
                 if not features:
                     fit_data["_intercept_only"] = 1.0
@@ -196,13 +233,39 @@ def main() -> None:
                 metric_rows.append(row)
                 if args.write_predictions:
                     prediction_frames.append(pred)
+            for params, score_frame in _long_prs_groups(prs_long, disease, patient_col, prs_param_cols):
+                fit_data = base_fit_data.merge(score_frame, on=patient_col, how="inner")
+                eval_data = base_eval_data.merge(score_frame, on=patient_col, how="inner")
+                if fit_data.empty or eval_data.empty:
+                    raise ValueError(
+                        f"No PRS-scored rows for disease={disease}, repeat={repeat}, params={params}"
+                    )
+                method = f"prs_covariate_{disease}"
+                pred = fit_predict_logistic(
+                    train=fit_data,
+                    val=eval_data,
+                    label_col=disease,
+                    feature_cols=[*covariates, "prs"],
+                    patient_col=patient_col,
+                    method=method,
+                    fold=int(repeat),
+                ).predictions.rename(columns={"fold": "repeat"})
+                for column, value in params.items():
+                    pred[column] = value
+                row = {"disease": disease, "method": method, "repeat": int(repeat), **params}
+                row.update(_metrics_for_predictions(pred))
+                metric_rows.append(row)
+                if args.write_predictions:
+                    prediction_frames.append(pred)
 
     repeat_metrics = pd.DataFrame(metric_rows)
     split_summary = pd.DataFrame(split_rows)
     write_table(repeat_metrics, out_dir / "repeat_metrics.csv")
     write_table(split_summary, out_dir / "repeat_split_summary.csv")
     write_table(eligible_counts(phenotype, labels, eligibility_rules), out_dir / "eligibility_counts.csv")
-    summary = summarize_repeated_metrics(repeat_metrics, ["disease", "method"])
+    summary_group_cols = ["disease", "method", *prs_param_cols]
+    present_group_cols = [col for col in summary_group_cols if col in repeat_metrics.columns]
+    summary = summarize_repeated_metrics(repeat_metrics, present_group_cols)
     write_table(summary, out_dir / "summary_metrics.csv")
     if args.write_predictions:
         predictions = pd.concat(prediction_frames, ignore_index=True)

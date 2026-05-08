@@ -43,6 +43,8 @@ SEED="${SEED:-42}"
 OUT_DIR="${OUT_DIR:-outputs/official_validation_baseline}"
 VALIDATION_PHENOTYPE_OUT="${VALIDATION_PHENOTYPE_OUT:-data/processed/official_validation_phenotype.csv}"
 PRS_SCORES="${PRS_SCORES:-}"
+PRS_LONG_SCORES="${PRS_LONG_SCORES:-}"
+PRS_PARAM_COLS="${PRS_PARAM_COLS:-clump_r2,p_threshold}"
 
 mkdir -p "$OUT_DIR" "$(dirname "$VALIDATION_PHENOTYPE_OUT")" "$UV_CACHE_DIR" logs/official_validation
 
@@ -63,6 +65,9 @@ cmd=(
 
 if [[ -n "$PRS_SCORES" ]]; then
   cmd+=(--prs-scores "$PRS_SCORES")
+fi
+if [[ -n "$PRS_LONG_SCORES" ]]; then
+  cmd+=(--prs-long-scores "$PRS_LONG_SCORES" --prs-param-cols "$PRS_PARAM_COLS")
 fi
 
 echo "Started official validation repeated holdout at $(date)"

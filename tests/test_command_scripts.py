@@ -354,6 +354,65 @@ def test_write_pt_cv_commands_generates_fold_aware_array_tasks(tmp_path):
     assert train_keep["#IID"].tolist() == ["P3", "P4"]
 
 
+def test_write_pt_full_train_commands_generates_full_training_tasks(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "summary_statistics": {
+                    "cad": {
+                        "file": "cad.tsv.gz",
+                        "accession": "GCSTTEST",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    train_keep = tmp_path / "train.keep.psam"
+    score_keep = tmp_path / "validation.keep.psam"
+    pd.DataFrame({"#IID": ["T1", "T2"]}).to_csv(train_keep, sep="\t", index=False)
+    pd.DataFrame({"#IID": ["V1", "V2"]}).to_csv(score_keep, sep="\t", index=False)
+    out_dir = tmp_path / "pt_full"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/write_pt_full_train_commands.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--genotype-prefix",
+            "qc/all",
+            "--harmonized-dir",
+            str(tmp_path / "harmonized"),
+            "--train-keep",
+            str(train_keep),
+            "--score-keep",
+            str(score_keep),
+            "--out-dir",
+            str(out_dir),
+            "--p-thresholds",
+            "1,0.05",
+            "--r2-thresholds",
+            "0.2",
+        ],
+        check=True,
+    )
+
+    task_list = out_dir / "cad" / "commands" / "cad.pt_full_train.array_tasks.txt"
+    assert len(task_list.read_text(encoding="utf-8").splitlines()) == 1
+    task_text = (out_dir / "cad" / "tasks" / "cad.full_train.r20p2.sh").read_text(encoding="utf-8")
+    assert f"--keep {train_keep}" in task_text
+    assert f"--keep {score_keep}" in task_text
+    assert "--score-col-nums 3 4" in task_text
+    manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.pt_full_train.tasks.csv")
+    assert manifest_out[["disease", "model_scope", "clump_r2"]].to_dict("records") == [
+        {"disease": "cad", "model_scope": "full_train", "clump_r2": 0.2}
+    ]
+
+
 def test_write_ldpred2_cv_commands_generates_fold_aware_array_tasks(tmp_path):
     manifest = tmp_path / "manifest.yaml"
     manifest.write_text(
@@ -505,6 +564,45 @@ def test_collect_pt_cv_scores_maps_named_plink2_sscore_columns(tmp_path):
         {"sampleid": "P2", "fold": 0, "clump_r2": 0.2, "p_threshold": 1.0, "prs": -0.1},
         {"sampleid": "P1", "fold": 0, "clump_r2": 0.2, "p_threshold": 0.05, "prs": 0.2},
         {"sampleid": "P2", "fold": 0, "clump_r2": 0.2, "p_threshold": 0.05, "prs": -0.2},
+    ]
+
+
+def test_collect_pt_scores_maps_full_train_sscore(tmp_path):
+    sscore = tmp_path / "full.sscore"
+    sscore.write_text(
+        "#IID BETA_p1_SUM BETA_p0p05_SUM\nV1 0.1 0.2\nV2 -0.1 -0.2\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "tasks.csv"
+    pd.DataFrame(
+        {
+            "disease": ["cad"],
+            "model_scope": ["full_train"],
+            "clump_r2": [0.2],
+            "p_thresholds": ["1,0.05"],
+            "sscore": [str(sscore)],
+        }
+    ).to_csv(manifest, index=False)
+    out = tmp_path / "scores.csv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/collect_pt_scores.py",
+            "--task-manifest",
+            str(manifest),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+
+    scores = pd.read_csv(out)
+    assert scores[["sampleid", "model_scope", "clump_r2", "p_threshold", "prs"]].to_dict("records") == [
+        {"sampleid": "V1", "model_scope": "full_train", "clump_r2": 0.2, "p_threshold": 1.0, "prs": 0.1},
+        {"sampleid": "V2", "model_scope": "full_train", "clump_r2": 0.2, "p_threshold": 1.0, "prs": -0.1},
+        {"sampleid": "V1", "model_scope": "full_train", "clump_r2": 0.2, "p_threshold": 0.05, "prs": 0.2},
+        {"sampleid": "V2", "model_scope": "full_train", "clump_r2": 0.2, "p_threshold": 0.05, "prs": -0.2},
     ]
 
 
@@ -681,7 +779,7 @@ def test_run_cv_accepts_disease_specific_splits(tmp_path):
 def test_run_official_validation_repeats_holdout_sampling(tmp_path):
     labelled = tmp_path / "released_labels.tsv"
     validation_covariates = tmp_path / "testing_covariates.tsv"
-    prs_scores = tmp_path / "prs_scores.csv"
+    prs_scores = tmp_path / "prs_scores_long.csv"
     out_dir = tmp_path / "official_validation"
     rows = []
     cov_rows = []
@@ -705,7 +803,11 @@ def test_run_official_validation_repeats_holdout_sampling(tmp_path):
         score_rows.append(
             {
                 "sampleid": patient,
-                "prs_cad": float(label + (i % 5) / 10),
+                "disease": "cad",
+                "model_scope": "full_train",
+                "clump_r2": 0.2,
+                "p_threshold": 1.0,
+                "prs": float(label + (i % 5) / 10),
             }
         )
     rows.append({"sampleid": "TRAIN_ONLY", "cad": 1, "age": 999.0})
@@ -727,8 +829,10 @@ def test_run_official_validation_repeats_holdout_sampling(tmp_path):
             "cad",
             "--covariates",
             "age",
-            "--prs-scores",
+            "--prs-long-scores",
             str(prs_scores),
+            "--prs-param-cols",
+            "clump_r2,p_threshold",
             "--eval-size",
             "20",
             "--n-repeats",
@@ -752,6 +856,9 @@ def test_run_official_validation_repeats_holdout_sampling(tmp_path):
     assert len(repeat_metrics) == 8
     assert repeat_metrics["repeat"].max() == 3
     assert set(repeat_metrics["n"]) == {20}
+    prs_metrics = repeat_metrics.loc[repeat_metrics["method"] == "prs_covariate_cad"]
+    assert set(prs_metrics["clump_r2"]) == {0.2}
+    assert set(prs_metrics["p_threshold"]) == {1.0}
 
     split_summary = pd.read_csv(out_dir / "repeat_split_summary.csv")
     assert len(split_summary) == 4
@@ -761,3 +868,4 @@ def test_run_official_validation_repeats_holdout_sampling(tmp_path):
     summary = pd.read_csv(out_dir / "summary_metrics.csv")
     assert set(summary["method"]) == {"covariate_only", "prs_covariate_cad"}
     assert set(summary["n_repeats"]) == {4}
+    assert {"clump_r2", "p_threshold"} <= set(summary.columns)

@@ -11,6 +11,8 @@ paths:
   official_labelled_phenotype: /gpfs/data/deciphEHRlab/deciphEHRdream/holdout_phase/phenotype_files/Training_Phase_Cov_file_with_Phenotype.txt
   official_validation_covariates: /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Testing_Cov_file.txt
   official_validation_phenotype: data/processed/official_validation_phenotype.csv
+  official_train_keep: data/processed/sample_sets/labeled_train.keep.psam
+  official_validation_keep: data/processed/sample_sets/unlabelled_validation.keep.psam
 
 columns:
   patient_id: sampleid

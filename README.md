@@ -53,9 +53,38 @@ uv run python scripts/run_official_validation.py \
 The official validation cohort is defined by
 `training_phase/phenotype_files/Testing_Cov_file.txt`. The released labels are
 read from `holdout_phase/phenotype_files/Training_Phase_Cov_file_with_Phenotype.txt`
-and joined by `sampleid`. If a per-patient PRS table is available, pass it with
-`--prs-scores`; columns named `prs_cad`, `prs_bc`, and `prs_T2D` are included in
-the disease-specific full logistic model.
+and joined by `sampleid`. If a selected per-patient PRS table is available, pass
+it with `--prs-scores`; columns named `prs_cad`, `prs_bc`, and `prs_T2D` are
+included in the disease-specific full logistic model. For PRS grids, pass a long
+table with `--prs-long-scores`.
+
+PRS models should now be built on the full official training set, not on
+fold-specific CV training subsets. For P+T, use `labeled_train.keep.psam` for LD
+clumping/model construction and score the official validation samples:
+
+```bash
+uv run python scripts/write_pt_full_train_commands.py \
+  --disease cad \
+  --manifest configs/official_sumstats.yaml \
+  --genotype-prefix outputs/genotype_qc/qc_final/all_chromosomes.qc \
+  --harmonized-dir data/processed/sumstats/harmonized \
+  --train-keep data/processed/sample_sets/labeled_train.keep.psam \
+  --score-keep data/processed/sample_sets/unlabelled_validation.keep.psam \
+  --out-dir outputs/pt_full_train
+
+sbatch slurm/pt_full_train_cad.sbatch
+
+uv run python scripts/collect_pt_scores.py \
+  --task-manifest outputs/pt_full_train/cad/commands/cad.pt_full_train.tasks.csv \
+  --out outputs/pt_full_train/cad/scores/cad.pt_full_train_scores_long.csv
+
+uv run python scripts/run_official_validation.py \
+  --labels cad \
+  --covariates sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd \
+  --prs-long-scores outputs/pt_full_train/cad/scores/cad.pt_full_train_scores_long.csv \
+  --prs-param-cols clump_r2,p_threshold \
+  --out-dir outputs/official_validation_pt/cad
+```
 
 After the common summary-statistics layer has produced `harmonized/*.tsv.gz`, prepare
 fold-aware P+T task scripts. The generated tasks use training-fold samples for LD
