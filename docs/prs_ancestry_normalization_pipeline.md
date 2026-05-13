@@ -98,20 +98,33 @@ target.fam
 
 ## 1.2 1000G reference genotype
 
-Either PLINK2 format:
+Recommended source:
 
 ```text
-1000g.pgen
-1000g.pvar
-1000g.psam
+1000 Genomes GRCh38 20190312 biallelic SNV+INDEL release
 ```
 
-or PLINK1 format:
+Prepare the project-local reference files with:
+
+```bash
+sbatch slurm/prepare_1000g_grch38.sbatch
+```
+
+This writes SNP-only, panel-labeled 1000G PLINK2 files under:
 
 ```text
-1000g.bed
-1000g.bim
-1000g.fam
+data/resources/1000g/grch38/1000g_GRCh38.pgen
+data/resources/1000g/grch38/1000g_GRCh38.pvar
+data/resources/1000g/grch38/1000g_GRCh38.psam
+```
+
+The preparation script keeps autosomal biallelic A/C/G/T SNPs and restricts the
+reference to 1000G Phase 3 samples with official `super_pop` labels by default.
+Raw VCF downloads and per-chromosome PGENs are retained in:
+
+```text
+data/resources/1000g/grch38/downloads/
+data/resources/1000g/grch38/pgen/
 ```
 
 ## 1.3 1000G sample panel
@@ -119,7 +132,7 @@ or PLINK1 format:
 File:
 
 ```text
-1000g_panel.tsv
+data/resources/1000g/grch38/1000g_panel.tsv
 ```
 
 Required columns:
