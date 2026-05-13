@@ -1,5 +1,7 @@
+import json
 import subprocess
 import sys
+from pathlib import Path
 
 import pandas as pd
 import yaml
@@ -415,6 +417,1301 @@ def test_write_pt_full_train_commands_generates_full_training_tasks(tmp_path):
     assert manifest_out["fit_sscore"].str.endswith(".fit.sscore").all()
 
 
+def test_prepare_prscs_inputs_maps_raw_rsids_to_target_ids(tmp_path):
+    raw = tmp_path / "raw.tsv"
+    pd.DataFrame(
+        {
+            "chromosome": [22, 22, 1],
+            "base_pair_location": [100, 200, 300],
+            "effect_allele": ["A", "G", "T"],
+            "other_allele": ["C", "A", "C"],
+            "odds_ratio": [1.1, 0.9, 1.2],
+            "p_value": [0.1, 0.2, 0.3],
+            "rsid": ["rs100", "rs200", "rs300"],
+            "alt": ["A", "G", "T"],
+        }
+    ).to_csv(raw, sep="\t", index=False)
+    harmonized = tmp_path / "harmonized.tsv"
+    pd.DataFrame(
+        {
+            "SNP": ["c22_100_snv_A_C", "c22_200_snv_A_G", "c1_300_snv_C_T"],
+            "CHR": [22, 22, 1],
+            "BP": [100, 200, 300],
+            "A1": ["A", "G", "T"],
+            "A2": ["C", "A", "C"],
+            "P": [0.1, 0.2, 0.3],
+            "BETA": [0.2, -0.1, 0.4],
+            "source_snp": ["c22_100_snv_C_A", "c22_200_snv_A_G", "c1_300_snv_C_T"],
+            "target_ref": ["A", "A", "C"],
+            "target_alt": ["C", "G", "T"],
+            "SE": [0.05, 0.06, 0.07],
+        }
+    ).to_csv(harmonized, sep="\t", index=False)
+    out_prefix = tmp_path / "cad.prscs"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/prepare_prscs_inputs.py",
+            "--raw-sumstats",
+            str(raw),
+            "--harmonized",
+            str(harmonized),
+            "--out-prefix",
+            str(out_prefix),
+            "--summary-out",
+            str(tmp_path / "summary.json"),
+            "--chromosomes",
+            "22",
+        ],
+        check=True,
+    )
+
+    sst = pd.read_csv(f"{out_prefix}.sst", sep="\t")
+    assert sst.to_dict("records") == [
+        {"SNP": "rs100", "A1": "A", "A2": "C", "BETA": 0.2, "SE": 0.05},
+        {"SNP": "rs200", "A1": "G", "A2": "A", "BETA": -0.1, "SE": 0.06},
+    ]
+    bim = pd.read_csv(f"{out_prefix}.bim", sep="\t", header=None)
+    assert bim.iloc[:, :6].values.tolist() == [
+        [22, "rs100", 0, 100, "C", "A"],
+        [22, "rs200", 0, 200, "G", "A"],
+    ]
+    id_map = pd.read_csv(f"{out_prefix}.target_id_map.tsv", sep="\t")
+    assert id_map.to_dict("records") == [
+        {"rsid": "rs100", "target_snp": "c22_100_snv_A_C"},
+        {"rsid": "rs200", "target_snp": "c22_200_snv_A_G"},
+    ]
+
+
+def test_prepare_prscs_inputs_auto_falls_back_to_p_when_se_is_empty(tmp_path):
+    raw = tmp_path / "raw.tsv"
+    pd.DataFrame(
+        {
+            "chromosome": [22, 22],
+            "base_pair_location": [100, 200],
+            "effect_allele": ["A", "G"],
+            "other_allele": ["C", "A"],
+            "odds_ratio": [1.1, 0.9],
+            "p_value": [0.1, 0.2],
+            "rsid": ["rs100", "rs200"],
+            "alt": ["A", "G"],
+        }
+    ).to_csv(raw, sep="\t", index=False)
+    harmonized = tmp_path / "harmonized.tsv"
+    pd.DataFrame(
+        {
+            "SNP": ["c22_100_snv_A_C", "c22_200_snv_A_G"],
+            "CHR": [22, 22],
+            "BP": [100, 200],
+            "A1": ["A", "G"],
+            "A2": ["C", "A"],
+            "P": [0.1, 0.2],
+            "BETA": [0.2, -0.1],
+            "source_snp": ["c22_100_snv_C_A", "c22_200_snv_A_G"],
+            "target_ref": ["A", "A"],
+            "target_alt": ["C", "G"],
+            "SE": ["", ""],
+        }
+    ).to_csv(harmonized, sep="\t", index=False)
+    out_prefix = tmp_path / "bc.prscs"
+    summary = tmp_path / "summary.json"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/prepare_prscs_inputs.py",
+            "--raw-sumstats",
+            str(raw),
+            "--harmonized",
+            str(harmonized),
+            "--out-prefix",
+            str(out_prefix),
+            "--summary-out",
+            str(summary),
+            "--chromosomes",
+            "22",
+            "--mode",
+            "auto",
+        ],
+        check=True,
+    )
+
+    sst = pd.read_csv(f"{out_prefix}.sst", sep="\t")
+    assert sst.to_dict("records") == [
+        {"SNP": "rs100", "A1": "A", "A2": "C", "BETA": 0.2, "P": 0.1},
+        {"SNP": "rs200", "A1": "G", "A2": "A", "BETA": -0.1, "P": 0.2},
+    ]
+    assert json.loads(summary.read_text(encoding="utf-8"))["mode"] == "beta-p"
+
+
+def test_build_prscs_scorefile_maps_effects_back_to_target_ids(tmp_path):
+    effects = tmp_path / "cad_pst_eff_a1_b0.5_phi1e-02_chr22.txt"
+    effects.write_text("22\trs100\t100\tA\tC\t2.0e-02\n22\trs200\t200\tG\tA\t-1.0e-02\n")
+    target_map = tmp_path / "map.tsv"
+    pd.DataFrame(
+        {
+            "rsid": ["rs100", "rs200"],
+            "target_snp": ["c22_100_snv_C_A", "c22_200_snv_A_G"],
+        }
+    ).to_csv(target_map, sep="\t", index=False)
+    out = tmp_path / "score.tsv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_prscs_scorefile.py",
+            "--effect-files",
+            str(effects),
+            "--target-id-map",
+            str(target_map),
+            "--out",
+            str(out),
+            "--summary-out",
+            str(tmp_path / "summary.json"),
+        ],
+        check=True,
+    )
+
+    score = pd.read_csv(out, sep="\t")
+    assert score.to_dict("records") == [
+        {"SNP": "c22_100_snv_C_A", "A1": "A", "BETA": 0.02},
+        {"SNP": "c22_200_snv_A_G", "A1": "G", "BETA": -0.01},
+    ]
+
+
+def test_collect_prscs_scores_reads_named_beta_sum(tmp_path):
+    sscore = tmp_path / "cad.sscore"
+    sscore.write_text(
+        "#IID\tALLELE_CT\tNAMED_ALLELE_DOSAGE_SUM\tBETA_AVG\tBETA_SUM\n"
+        "S1\t10\t4.0\t0.01\t0.1\n"
+        "S2\t10\t5.0\t0.02\t0.2\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "tasks.csv"
+    pd.DataFrame(
+        {
+            "disease": ["cad"],
+            "model_scope": ["full_train"],
+            "phi": ["1e-2"],
+            "sscore": [str(sscore)],
+        }
+    ).to_csv(manifest, index=False)
+    out = tmp_path / "scores.csv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/collect_prscs_scores.py",
+            "--task-manifest",
+            str(manifest),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+
+    scores = pd.read_csv(out)
+    assert scores[["sampleid", "disease", "model_scope", "phi", "prs"]].to_dict("records") == [
+        {"sampleid": "S1", "disease": "cad", "model_scope": "full_train", "phi": 0.01, "prs": 0.1},
+        {"sampleid": "S2", "disease": "cad", "model_scope": "full_train", "phi": 0.01, "prs": 0.2},
+    ]
+
+
+def test_write_prscs_full_train_commands_generates_chr_tasks_and_scoring(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "summary_statistics": {
+                    "cad": {
+                        "file": "cad.tsv.gz",
+                        "accession": "GCSTTEST",
+                        "default_n": 12345,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    out_dir = tmp_path / "prscs"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/write_prscs_full_train_commands.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--sumstats-root",
+            "sumstats",
+            "--genotype-prefix",
+            "qc/all",
+            "--harmonized-dir",
+            str(tmp_path / "harmonized"),
+            "--out-dir",
+            str(out_dir),
+            "--ref-dir",
+            "refs/ldblk_1kg_eur",
+            "--prscs-script",
+            "tools/PRScs.py",
+            "--chromosomes",
+            "21,22",
+            "--phi-grid",
+            "auto,1e-2",
+            "--n-iter",
+            "50",
+            "--n-burnin",
+            "25",
+        ],
+        check=True,
+    )
+
+    task_list = out_dir / "cad" / "commands" / "cad.prscs_full_train.array_tasks.txt"
+    assert len(task_list.read_text(encoding="utf-8").splitlines()) == 4
+    auto_task_text = (out_dir / "cad" / "tasks" / "cad.phiauto.chr22.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "--chrom=22" in auto_task_text
+    assert "--phi=" not in auto_task_text
+    assert "phiauto_chr22.txt" in auto_task_text
+    task_text = (out_dir / "cad" / "tasks" / "cad.phi1e-02.chr22.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "--chrom=22" in task_text
+    assert "--phi=1e-2" in task_text
+    assert "--n_iter=50 --n_burnin=25" in task_text
+    assert "ldblk_1kg_chr22.hdf5" in task_text
+    score_text = (out_dir / "cad" / "commands" / "cad.phi1e-02.score.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "scripts/build_prscs_scorefile.py" in score_text
+    assert "--score" in score_text
+    manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.prscs_full_train.tasks.csv")
+    assert manifest_out[["disease", "model_scope", "phi", "n_gwas"]].to_dict("records") == [
+        {"disease": "cad", "model_scope": "full_train", "phi": "auto", "n_gwas": 12345},
+        {"disease": "cad", "model_scope": "full_train", "phi": "1e-2", "n_gwas": 12345},
+    ]
+
+
+def test_prscs_bc_slurm_defaults_include_auto_phi():
+    prepare_text = Path("slurm/prscs_prepare_inputs_bc.sbatch").read_text(encoding="utf-8")
+    train_text = Path("slurm/prscs_full_train_bc.sbatch").read_text(encoding="utf-8")
+
+    assert 'export PHI_GRID="${PHI_GRID:-auto,1e-6,1e-4,1e-2}"' in prepare_text
+    assert 'export PHI_GRID="${PHI_GRID:-auto,1e-6,1e-4,1e-2}"' in train_text
+    assert "#SBATCH --array=1-88%22" in train_text
+
+
+def test_prepare_sdpr_inputs_writes_default_n_and_deduplicates(tmp_path):
+    harmonized = tmp_path / "harmonized.tsv"
+    pd.DataFrame(
+        {
+            "SNP": ["rs1", "rs2", "rs1", "rs3"],
+            "CHR": [22, 22, 22, 1],
+            "A1": ["A", "C", "A", "G"],
+            "A2": ["G", "T", "G", "A"],
+            "BETA": [0.1, -0.2, 0.1, 0.3],
+            "P": [0.01, 1e-320, 0.01, 0.03],
+        }
+    ).to_csv(harmonized, sep="\t", index=False)
+    out = tmp_path / "sdpr.ss"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/prepare_sdpr_inputs.py",
+            "--harmonized",
+            str(harmonized),
+            "--out",
+            str(out),
+            "--summary-out",
+            str(tmp_path / "summary.json"),
+            "--chromosomes",
+            "22",
+            "--default-n",
+            "12345",
+            "--chunksize",
+            "2",
+        ],
+        check=True,
+    )
+
+    sdpr = pd.read_csv(out, sep="\t")
+    assert sdpr.to_dict("records") == [
+        {"SNP": "rs1", "A1": "A", "A2": "G", "BETA": 0.1, "P": 0.01, "N": 12345.0},
+        {"SNP": "rs2", "A1": "C", "A2": "T", "BETA": -0.2, "P": 1e-300, "N": 12345.0},
+    ]
+    summary = yaml.safe_load((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert summary["n_sdpr_rows_written"] == 2
+    assert summary["n_p_values_clipped_to_sdpr_min"] == 1
+    assert float(summary["sdpr_min_p"]) == 1e-300
+
+
+def test_prepare_sdpr_inputs_can_write_rsid_inputs_for_prebuilt_reference(tmp_path):
+    raw = tmp_path / "raw.tsv"
+    pd.DataFrame(
+        {
+            "SNP": ["raw1", "raw2"],
+            "CHR": [1, 1],
+            "BP": [100, 200],
+            "A1": ["G", "T"],
+            "A2": ["A", "C"],
+            "ALT": ["G", "T"],
+            "RSID": ["rs100", "rs200"],
+        }
+    ).to_csv(raw, sep="\t", index=False)
+    harmonized = tmp_path / "harmonized.tsv"
+    pd.DataFrame(
+        {
+            "SNP": ["c1_100_snv_A_G", "c1_200_snv_C_T"],
+            "source_snp": ["c1_100_snv_A_G", "c1_200_snv_C_T"],
+            "CHR": [1, 1],
+            "A1": ["G", "T"],
+            "A2": ["A", "C"],
+            "BETA": [0.1, -0.2],
+            "P": [0.01, 0.02],
+        }
+    ).to_csv(harmonized, sep="\t", index=False)
+    target_bim = tmp_path / "target.bim"
+    target_bim.write_text(
+        "1\tc1_100_snv_A_G\t0\t100\tG\tA\n1\tc1_200_snv_C_T\t0\t200\tT\tC\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "sdpr.ss"
+    target_map = tmp_path / "target_id_map.tsv"
+    valid_bim = tmp_path / "valid.bim"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/prepare_sdpr_inputs.py",
+            "--harmonized",
+            str(harmonized),
+            "--raw-sumstats",
+            str(raw),
+            "--out",
+            str(out),
+            "--target-id-map-out",
+            str(target_map),
+            "--target-bim",
+            str(target_bim),
+            "--valid-bim-out",
+            str(valid_bim),
+            "--summary-out",
+            str(tmp_path / "summary.json"),
+            "--default-n",
+            "12345",
+        ],
+        check=True,
+    )
+
+    assert pd.read_csv(out, sep="\t")["SNP"].tolist() == ["rs100", "rs200"]
+    assert pd.read_csv(target_map, sep="\t").to_dict("records") == [
+        {"rsid": "rs100", "target_snp": "c1_100_snv_A_G"},
+        {"rsid": "rs200", "target_snp": "c1_200_snv_C_T"},
+    ]
+    assert pd.read_csv(valid_bim, sep="\t", header=None).iloc[:, 1].tolist() == ["rs100", "rs200"]
+
+
+def test_build_sdpr_scorefile_reads_effects(tmp_path):
+    effects = tmp_path / "cad.chr22.sdpr.txt"
+    effects.write_text("SNP\tA1\tbeta\nrs1\tA\t0.1\nrs2\tC\t-0.2\n", encoding="utf-8")
+    out = tmp_path / "score.tsv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_sdpr_scorefile.py",
+            "--effect-files",
+            str(effects),
+            "--out",
+            str(out),
+            "--summary-out",
+            str(tmp_path / "summary.json"),
+        ],
+        check=True,
+    )
+
+    score = pd.read_csv(out, sep="\t")
+    assert score.to_dict("records") == [
+        {"SNP": "rs1", "A1": "A", "BETA": 0.1},
+        {"SNP": "rs2", "A1": "C", "BETA": -0.2},
+    ]
+
+
+def test_build_sdpr_scorefile_maps_prebuilt_rsid_effects_to_target_ids(tmp_path):
+    effects = tmp_path / "cad.chr22.sdpr.txt"
+    effects.write_text("SNP\tA1\tbeta\nrs1\tA\t0.1\nrs2\tC\t-0.2\n", encoding="utf-8")
+    target_map = tmp_path / "target_id_map.tsv"
+    pd.DataFrame(
+        {
+            "rsid": ["rs1", "rs2"],
+            "target_snp": ["c22_100_snv_G_A", "c22_200_snv_T_C"],
+        }
+    ).to_csv(target_map, sep="\t", index=False)
+    out = tmp_path / "score.tsv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_sdpr_scorefile.py",
+            "--effect-files",
+            str(effects),
+            "--target-id-map",
+            str(target_map),
+            "--out",
+            str(out),
+            "--summary-out",
+            str(tmp_path / "summary.json"),
+        ],
+        check=True,
+    )
+
+    score = pd.read_csv(out, sep="\t")
+    assert score.to_dict("records") == [
+        {"SNP": "c22_100_snv_G_A", "A1": "A", "BETA": 0.1},
+        {"SNP": "c22_200_snv_T_C", "A1": "C", "BETA": -0.2},
+    ]
+
+
+def test_collect_sdpr_scores_reads_named_beta_sum(tmp_path):
+    sscore = tmp_path / "cad.sscore"
+    sscore.write_text(
+        "#IID\tALLELE_CT\tNAMED_ALLELE_DOSAGE_SUM\tBETA_AVG\tBETA_SUM\n"
+        "S1\t10\t4.0\t0.01\t0.1\n"
+        "S2\t10\t5.0\t0.02\t0.2\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "tasks.csv"
+    pd.DataFrame(
+        {
+            "disease": ["cad"],
+            "model_scope": ["full_train"],
+            "model": ["sdpr"],
+            "sscore": [str(sscore)],
+        }
+    ).to_csv(manifest, index=False)
+    out = tmp_path / "scores.csv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/collect_sdpr_scores.py",
+            "--task-manifest",
+            str(manifest),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+
+    scores = pd.read_csv(out)
+    assert scores[["sampleid", "disease", "model_scope", "model", "prs"]].to_dict("records") == [
+        {"sampleid": "S1", "disease": "cad", "model_scope": "full_train", "model": "sdpr", "prs": 0.1},
+        {"sampleid": "S2", "disease": "cad", "model_scope": "full_train", "model": "sdpr", "prs": 0.2},
+    ]
+
+
+def test_prepare_sbayesrc_inputs_maps_rsids_and_effect_frequencies(tmp_path):
+    raw = tmp_path / "raw.tsv"
+    pd.DataFrame(
+        {
+            "SNP": ["raw1", "raw2"],
+            "CHR": [1, 1],
+            "BP": [100, 200],
+            "A1": ["G", "T"],
+            "A2": ["A", "C"],
+            "ALT": ["G", "T"],
+            "RSID": ["rs100", "rs200"],
+        }
+    ).to_csv(raw, sep="\t", index=False)
+    harmonized = tmp_path / "harmonized.tsv"
+    pd.DataFrame(
+        {
+            "SNP": ["c1_100_snv_A_G", "c1_200_snv_T_C"],
+            "CHR": [1, 1],
+            "A1": ["G", "C"],
+            "A2": ["A", "T"],
+            "BETA": [0.1, -0.2],
+            "SE": [None, None],
+            "P": [0.001, 0.02],
+            "source_snp": ["c1_100_snv_A_G", "c1_200_snv_C_T"],
+            "target_snp": ["c1_100_snv_A_G", "c1_200_snv_T_C"],
+        }
+    ).to_csv(harmonized, sep="\t", index=False)
+    freq = tmp_path / "train.afreq"
+    freq.write_text(
+        "#CHROM\tID\tREF\tALT\tALT_FREQS\tOBS_CT\n"
+        "1\tc1_100_snv_A_G\tA\tG\t0.25\t10\n"
+        "1\tc1_200_snv_T_C\tT\tC\t0.80\t10\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "cad.ma"
+    target_map = tmp_path / "target_id_map.tsv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/prepare_sbayesrc_inputs.py",
+            "--raw-sumstats",
+            str(raw),
+            "--harmonized",
+            str(harmonized),
+            "--freq",
+            str(freq),
+            "--out",
+            str(out),
+            "--target-id-map-out",
+            str(target_map),
+            "--summary-out",
+            str(tmp_path / "summary.json"),
+            "--default-n",
+            "12345",
+            "--chunksize",
+            "1",
+        ],
+        check=True,
+    )
+
+    ma = pd.read_csv(out, sep="\t")
+    ma["freq"] = ma["freq"].round(6)
+    assert ma[["SNP", "A1", "A2", "freq", "b", "p", "N"]].to_dict("records") == [
+        {"SNP": "rs100", "A1": "G", "A2": "A", "freq": 0.25, "b": 0.1, "p": 0.001, "N": 12345.0},
+        {"SNP": "rs200", "A1": "C", "A2": "T", "freq": 0.8, "b": -0.2, "p": 0.02, "N": 12345.0},
+    ]
+    assert ma["se"].gt(0).all()
+    assert pd.read_csv(target_map, sep="\t").to_dict("records") == [
+        {"rsid": "rs100", "target_snp": "c1_100_snv_A_G"},
+        {"rsid": "rs200", "target_snp": "c1_200_snv_T_C"},
+    ]
+    summary = yaml.safe_load((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert summary["n_sbayesrc_rows_written"] == 2
+    assert summary["rsid_join_column"] == "source_snp"
+    assert summary["se_source"] == "derived_from_beta_p"
+
+
+def test_build_sbayesrc_scorefile_maps_snpres_to_target_ids(tmp_path):
+    snpres = tmp_path / "cad.sbayesrc.snpRes"
+    snpres.write_text(
+        "Id Name Chrom Position A1 A2 A1Frq A1Effect SE PIP\n"
+        "1 rs1 1 100 A G 0.1 0.03 0.01 0.9\n"
+        "2 rs2 1 200 C T 0.2 -0.04 0.02 0.8\n",
+        encoding="utf-8",
+    )
+    target_map = tmp_path / "target_id_map.tsv"
+    pd.DataFrame(
+        {
+            "rsid": ["rs1", "rs2"],
+            "target_snp": ["c1_100_snv_G_A", "c1_200_snv_T_C"],
+        }
+    ).to_csv(target_map, sep="\t", index=False)
+    out = tmp_path / "score.tsv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_sbayesrc_scorefile.py",
+            "--snpres",
+            str(snpres),
+            "--target-id-map",
+            str(target_map),
+            "--out",
+            str(out),
+            "--summary-out",
+            str(tmp_path / "summary.json"),
+        ],
+        check=True,
+    )
+
+    score = pd.read_csv(out, sep="\t")
+    assert score.to_dict("records") == [
+        {"SNP": "c1_100_snv_G_A", "A1": "A", "BETA": 0.03},
+        {"SNP": "c1_200_snv_T_C", "A1": "C", "BETA": -0.04},
+    ]
+
+
+def test_collect_sbayesrc_scores_reads_named_beta_sum(tmp_path):
+    sscore = tmp_path / "cad.sscore"
+    sscore.write_text(
+        "#IID\tALLELE_CT\tNAMED_ALLELE_DOSAGE_SUM\tBETA_AVG\tBETA_SUM\n"
+        "S1\t10\t4.0\t0.01\t0.1\n"
+        "S2\t10\t5.0\t0.02\t0.2\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "tasks.csv"
+    pd.DataFrame(
+        {
+            "disease": ["cad"],
+            "model_scope": ["full_train"],
+            "model": ["sbayesrc"],
+            "sscore": [str(sscore)],
+        }
+    ).to_csv(manifest, index=False)
+    out = tmp_path / "scores.csv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/collect_sbayesrc_scores.py",
+            "--task-manifest",
+            str(manifest),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+
+    scores = pd.read_csv(out)
+    assert scores[["sampleid", "disease", "model_scope", "model", "prs"]].to_dict("records") == [
+        {"sampleid": "S1", "disease": "cad", "model_scope": "full_train", "model": "sbayesrc", "prs": 0.1},
+        {"sampleid": "S2", "disease": "cad", "model_scope": "full_train", "model": "sbayesrc", "prs": 0.2},
+    ]
+
+
+def test_write_sbayesrc_full_train_commands_generates_workflow(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "summary_statistics": {
+                    "cad": {
+                        "file": "cad.tsv.gz",
+                        "accession": "GCSTTEST",
+                        "default_n": 12345,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    train_keep = tmp_path / "train.keep.psam"
+    score_keep = tmp_path / "validation.keep.psam"
+    pd.DataFrame({"#IID": ["T1"]}).to_csv(train_keep, sep="\t", index=False)
+    pd.DataFrame({"#IID": ["V1"]}).to_csv(score_keep, sep="\t", index=False)
+    variant_extract = tmp_path / "hm3plus.snplist"
+    variant_extract.write_text("rs1\n", encoding="utf-8")
+    ldm = tmp_path / "ldm"
+    ldm.mkdir()
+    annot = tmp_path / "annot.txt"
+    annot.write_text("SNP\tannot\nrs1\t1\n", encoding="utf-8")
+    out_dir = tmp_path / "sbayesrc"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/write_sbayesrc_full_train_commands.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--sumstats-root",
+            str(tmp_path / "sumstats"),
+            "--genotype-prefix",
+            "qc/all",
+            "--harmonized-dir",
+            str(tmp_path / "harmonized"),
+            "--train-keep",
+            str(train_keep),
+            "--score-keep",
+            str(score_keep),
+            "--variant-extract",
+            str(variant_extract),
+            "--out-dir",
+            str(out_dir),
+            "--ldm-eigen-dir",
+            str(ldm),
+            "--annot-file",
+            str(annot),
+            "--gctb",
+            "tools/gctb",
+            "--chromosomes",
+            "21,22",
+            "--chain-length",
+            "50",
+            "--burn-in",
+            "10",
+            "--thin",
+            "2",
+            "--no-mcmc-bin",
+        ],
+        check=True,
+    )
+
+    command_dir = out_dir / "cad" / "commands"
+    frequency_text = (command_dir / "cad.sbayesrc.frequency.sh").read_text(encoding="utf-8")
+    assert "--freq" in frequency_text
+    assert str(variant_extract) in frequency_text
+    prepare_text = (command_dir / "cad.sbayesrc.prepare_ma.sh").read_text(encoding="utf-8")
+    assert "scripts/prepare_sbayesrc_inputs.py" in prepare_text
+    impute_text = (command_dir / "cad.sbayesrc.impute_summary.sh").read_text(encoding="utf-8")
+    assert "--impute-summary" in impute_text
+    task_text = (out_dir / "cad" / "tasks" / "cad.sbayesrc.sh").read_text(encoding="utf-8")
+    assert "--sbayes RC" in task_text
+    assert "--annot" in task_text
+    assert "--chain-length 50" in task_text
+    assert "--no-mcmc-bin" in task_text
+    score_text = (command_dir / "cad.sbayesrc.score.sh").read_text(encoding="utf-8")
+    assert "scripts/build_sbayesrc_scorefile.py" in score_text
+    assert "--score" in score_text
+    manifest_out = pd.read_csv(command_dir / "cad.sbayesrc_full_train.tasks.csv")
+    assert manifest_out[["disease", "model_scope", "model", "n_gwas"]].to_dict("records") == [
+        {"disease": "cad", "model_scope": "full_train", "model": "sbayesrc", "n_gwas": 12345.0}
+    ]
+
+
+def test_sbayesrc_slurm_allows_empty_variant_extract_override():
+    text = Path("slurm/sbayesrc_full_train.sbatch").read_text(encoding="utf-8")
+
+    assert 'VARIANT_EXTRACT_DEFAULT="${VARIANT_EXTRACT_DEFAULT:-data/processed/ldpred2/hm3plus_target.snplist}"' in text
+    assert 'VARIANT_EXTRACT="${VARIANT_EXTRACT-$VARIANT_EXTRACT_DEFAULT}"' in text
+    assert 'if [[ -n "$VARIANT_EXTRACT" ]]; then' in text
+
+
+def test_prepare_megaprs_inputs_writes_ldak_summary_format(tmp_path):
+    harmonized = tmp_path / "harmonized.tsv"
+    pd.DataFrame(
+        {
+            "SNP": ["c1_100_snv_A_G", "c1_200_snv_C_T"],
+            "CHR": [1, 1],
+            "A1": ["G", "C"],
+            "A2": ["A", "T"],
+            "BETA": [0.1, -0.2],
+            "SE": [0.01, 0.02],
+            "P": [0.001, 0.02],
+        }
+    ).to_csv(harmonized, sep="\t", index=False)
+    freq = tmp_path / "train.afreq"
+    freq.write_text(
+        "#CHROM\tID\tREF\tALT\tALT_FREQS\tOBS_CT\n"
+        "1\tc1_100_snv_A_G\tA\tG\t0.25\t10\n"
+        "1\tc1_200_snv_C_T\tC\tT\t0.80\t10\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "cad.megaprs.summaries"
+    predictors = tmp_path / "cad.megaprs.predictors"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/prepare_megaprs_inputs.py",
+            "--harmonized",
+            str(harmonized),
+            "--freq",
+            str(freq),
+            "--out",
+            str(out),
+            "--predictors-out",
+            str(predictors),
+            "--summary-out",
+            str(tmp_path / "summary.json"),
+            "--default-n",
+            "12345",
+            "--chunksize",
+            "1",
+        ],
+        check=True,
+    )
+
+    summaries = pd.read_csv(out, sep="\t")
+    summaries["A1Freq"] = summaries["A1Freq"].round(6)
+    assert summaries.to_dict("records") == [
+        {
+            "Predictor": "c1_100_snv_A_G",
+            "A1": "G",
+            "A2": "A",
+            "BETA": 0.1,
+            "SE": 0.01,
+            "n": 12345.0,
+            "A1Freq": 0.25,
+        },
+        {
+            "Predictor": "c1_200_snv_C_T",
+            "A1": "C",
+            "A2": "T",
+            "BETA": -0.2,
+            "SE": 0.02,
+            "n": 12345.0,
+            "A1Freq": 0.2,
+        },
+    ]
+    summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert summary["n_megaprs_rows_written"] == 2
+    assert predictors.read_text(encoding="utf-8").splitlines() == [
+        "c1_100_snv_A_G",
+        "c1_200_snv_C_T",
+    ]
+
+
+def test_remap_megaprs_annotations_maps_rsids_to_target_predictors(tmp_path):
+    target_map = tmp_path / "target_id_map.tsv"
+    pd.DataFrame(
+        {
+            "rsid": ["rs1", "rs2", "rs3", "rsdup", "rsdup"],
+            "target_snp": [
+                "c1_100_snv_A_G",
+                "c1_200_snv_C_T",
+                "c1_300_snv_A_C",
+                "c1_400_snv_A_G",
+                "c1_500_snv_A_G",
+            ],
+        }
+    ).to_csv(target_map, sep="\t", index=False)
+    predictors = tmp_path / "target.cors.bim"
+    predictors.write_text(
+        "1 c1_100_snv_A_G 0 100 A G\n"
+        "1 c1_200_snv_C_T 0 200 C T\n"
+        "1 c1_300_snv_A_C 0 300 A C\n"
+        "1 c1_400_snv_A_G 0 400 A G\n"
+        "1 c1_500_snv_A_G 0 500 A G\n",
+        encoding="utf-8",
+    )
+    annotation_prefix = tmp_path / "BaselineLD"
+    (tmp_path / "BaselineLD1").write_text("rs1 1\nrs2 1\nrsdup 1\n", encoding="utf-8")
+    (tmp_path / "BaselineLD2").write_text("rs3 1\nrs_missing 1\n", encoding="utf-8")
+    (tmp_path / "BaselineLD.names").write_text("ann1\nann2\n", encoding="utf-8")
+    out_prefix = tmp_path / "mapped" / "BaselineLD"
+    summary = tmp_path / "summary.json"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/remap_megaprs_annotations.py",
+            "--annotation-prefix",
+            str(annotation_prefix),
+            "--annotation-number",
+            "2",
+            "--target-id-map",
+            str(target_map),
+            "--predictors",
+            str(predictors),
+            "--out-prefix",
+            str(out_prefix),
+            "--summary-out",
+            str(summary),
+        ],
+        check=True,
+    )
+
+    assert (tmp_path / "mapped" / "BaselineLD1").read_text(encoding="utf-8").splitlines() == [
+        "c1_100_snv_A_G 1",
+        "c1_200_snv_C_T 1",
+    ]
+    assert (tmp_path / "mapped" / "BaselineLD2").read_text(encoding="utf-8").splitlines() == [
+        "c1_300_snv_A_C 1",
+    ]
+    assert (tmp_path / "mapped" / "BaselineLD.names").read_text(encoding="utf-8") == "ann1\nann2\n"
+    report = json.loads(summary.read_text(encoding="utf-8"))
+    assert report["n_duplicate_rsids_removed"] == 1
+    assert report["n_total_mapped_rows"] == 3
+
+
+def test_build_megaprs_scorefile_reads_ldak_effects(tmp_path):
+    effects = tmp_path / "cad.megaprs.effects"
+    effects.write_text(
+        "Predictor A1 A2 Centre Effect\n"
+        "c1_100_snv_A_G G A 0.25 0.03\n"
+        "c1_200_snv_C_T C T 0.20 -0.04\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "score.tsv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_megaprs_scorefile.py",
+            "--effects",
+            str(effects),
+            "--out",
+            str(out),
+            "--summary-out",
+            str(tmp_path / "summary.json"),
+        ],
+        check=True,
+    )
+
+    score = pd.read_csv(out, sep="\t")
+    assert score.to_dict("records") == [
+        {"SNP": "c1_100_snv_A_G", "A1": "G", "BETA": 0.03},
+        {"SNP": "c1_200_snv_C_T", "A1": "C", "BETA": -0.04},
+    ]
+
+
+def test_collect_megaprs_scores_reads_named_beta_sum(tmp_path):
+    sscore = tmp_path / "cad.sscore"
+    sscore.write_text(
+        "#IID\tALLELE_CT\tNAMED_ALLELE_DOSAGE_SUM\tBETA_AVG\tBETA_SUM\n"
+        "S1\t10\t4.0\t0.01\t0.1\n"
+        "S2\t10\t5.0\t0.02\t0.2\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "tasks.csv"
+    pd.DataFrame(
+        {
+            "disease": ["cad"],
+            "model_scope": ["full_train"],
+            "model": ["megaprs_bayesr"],
+            "sscore": [str(sscore)],
+        }
+    ).to_csv(manifest, index=False)
+    out = tmp_path / "scores.csv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/collect_megaprs_scores.py",
+            "--task-manifest",
+            str(manifest),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+
+    scores = pd.read_csv(out)
+    assert scores[["sampleid", "disease", "model_scope", "model", "prs"]].to_dict("records") == [
+        {"sampleid": "S1", "disease": "cad", "model_scope": "full_train", "model": "megaprs_bayesr", "prs": 0.1},
+        {"sampleid": "S2", "disease": "cad", "model_scope": "full_train", "model": "megaprs_bayesr", "prs": 0.2},
+    ]
+
+
+def test_write_megaprs_full_train_commands_generates_workflow(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "summary_statistics": {
+                    "cad": {
+                        "file": "cad.tsv.gz",
+                        "accession": "GCSTTEST",
+                        "default_n": 12345,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    train_keep = tmp_path / "train.keep.psam"
+    score_keep = tmp_path / "validation.keep.psam"
+    pd.DataFrame({"#IID": ["T1"]}).to_csv(train_keep, sep="\t", index=False)
+    pd.DataFrame({"#IID": ["V1"]}).to_csv(score_keep, sep="\t", index=False)
+    variant_extract = tmp_path / "hm3plus.snplist"
+    variant_extract.write_text("rs1\n", encoding="utf-8")
+    break_points = tmp_path / "berisa.txt"
+    break_points.write_text("1 1 100\n", encoding="utf-8")
+    out_dir = tmp_path / "megaprs"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/write_megaprs_full_train_commands.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--genotype-prefix",
+            "qc/all",
+            "--harmonized-dir",
+            str(tmp_path / "harmonized"),
+            "--train-keep",
+            str(train_keep),
+            "--score-keep",
+            str(score_keep),
+            "--variant-extract",
+            str(variant_extract),
+            "--out-dir",
+            str(out_dir),
+            "--reference-dir",
+            str(tmp_path / "reference"),
+            "--ldak",
+            "tools/ldak",
+            "--break-points",
+            str(break_points),
+            "--max-cor",
+            "0.98",
+            "--model",
+            "bayesr",
+            "--annotation-number",
+            "86",
+            "--annotation-prefix",
+            "refs/baselineLD.",
+            "--check-mcmc",
+            "0",
+            "--mcmc-solve",
+            "1",
+        ],
+        check=True,
+    )
+
+    command_dir = out_dir / "cad" / "commands"
+    assert "--freq" in (command_dir / "cad.megaprs.frequency.sh").read_text(encoding="utf-8")
+    reference_text = (command_dir / "cad.megaprs.make_reference.sh").read_text(encoding="utf-8")
+    assert "--make-bed" in reference_text
+    assert str(variant_extract) in reference_text
+    prepare_text = (command_dir / "cad.megaprs.prepare_sumstats.sh").read_text(encoding="utf-8")
+    assert "scripts/prepare_megaprs_inputs.py" in prepare_text
+    assert "--predictors-out" in prepare_text
+    cors_array_text = (command_dir / "cad.megaprs.calc_cors.array.sh").read_text(encoding="utf-8")
+    assert "SLURM_ARRAY_TASK_ID" in cors_array_text
+    cors_task_list = command_dir / "cad.megaprs.calc_cors.array_tasks.txt"
+    cors_tasks = cors_task_list.read_text(encoding="utf-8").strip().splitlines()
+    assert len(cors_tasks) == 22
+    cors_text = Path(cors_tasks[0]).read_text(encoding="utf-8")
+    assert "--calc-cors" in cors_text
+    assert "--max-cor \\\n  0.98" in cors_text
+    assert "--chr \\\n  1" in cors_text
+    assert str(break_points) in cors_text
+    join_text = (command_dir / "cad.megaprs.join_cors.sh").read_text(encoding="utf-8")
+    assert "--join-cors" in join_text
+    assert "--corslist" in join_text
+    task_text = (out_dir / "cad" / "tasks" / "cad.megaprs.sh").read_text(encoding="utf-8")
+    assert "--mega-prs" in task_text
+    assert "--model \\\n  bayesr" in task_text
+    assert "--annotation-number \\\n  86" in task_text
+    assert "--check-MCMC \\\n  NO" in task_text
+    assert "--MCMC-solve \\\n  YES" in task_text
+    score_text = (command_dir / "cad.megaprs.score.sh").read_text(encoding="utf-8")
+    assert "scripts/build_megaprs_scorefile.py" in score_text
+    manifest_out = pd.read_csv(command_dir / "cad.megaprs_full_train.tasks.csv")
+    assert manifest_out[["disease", "model_scope", "model", "n_gwas"]].to_dict("records") == [
+        {"disease": "cad", "model_scope": "full_train", "model": "megaprs_bayesr", "n_gwas": 12345.0}
+    ]
+    pre_cors_text = (command_dir / "cad.megaprs.pre_cors.sh").read_text(encoding="utf-8")
+    assert pre_cors_text.index("cad.megaprs.prepare_sumstats.sh") < pre_cors_text.index(
+        "cad.megaprs.make_reference.sh"
+    )
+    workflow_text = (command_dir / "cad.megaprs_full_train.commands.sh").read_text(encoding="utf-8")
+    assert workflow_text.index("cad.megaprs.calc_cors.array_tasks.txt") < workflow_text.index(
+        "cad.megaprs.join_cors.sh"
+    )
+    assert manifest_out["n_cors_tasks"].tolist() == [22]
+
+
+def test_write_megaprs_full_train_commands_uses_summary_predictors_for_reference(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "summary_statistics": {
+                    "cad": {
+                        "file": "cad.tsv.gz",
+                        "accession": "GCSTTEST",
+                        "default_n": 12345,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    train_keep = tmp_path / "train.keep.psam"
+    score_keep = tmp_path / "validation.keep.psam"
+    pd.DataFrame({"#IID": ["T1"]}).to_csv(train_keep, sep="\t", index=False)
+    pd.DataFrame({"#IID": ["V1"]}).to_csv(score_keep, sep="\t", index=False)
+    out_dir = tmp_path / "megaprs"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/write_megaprs_full_train_commands.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--genotype-prefix",
+            "qc/all",
+            "--harmonized-dir",
+            str(tmp_path / "harmonized"),
+            "--train-keep",
+            str(train_keep),
+            "--score-keep",
+            str(score_keep),
+            "--out-dir",
+            str(out_dir),
+        ],
+        check=True,
+    )
+
+    command_dir = out_dir / "cad" / "commands"
+    reference_text = (command_dir / "cad.megaprs.make_reference.sh").read_text(encoding="utf-8")
+    predictors_file = out_dir / "cad" / "inputs" / "cad.megaprs.predictors"
+    assert str(predictors_file) in reference_text
+    task_text = (out_dir / "cad" / "tasks" / "cad.megaprs.sh").read_text(encoding="utf-8")
+    assert "--annotation-prefix" not in task_text
+    assert "--annotation-number" not in task_text
+    manifest_out = pd.read_csv(command_dir / "cad.megaprs_full_train.tasks.csv")
+    assert manifest_out.loc[0, "reference_extract"] == str(predictors_file)
+
+
+def test_megaprs_slurm_defaults_to_target_profile_without_annotations():
+    text = Path("slurm/megaprs_full_train.sbatch").read_text(encoding="utf-8")
+    assert 'MEGAPRS_PROFILE="${MEGAPRS_PROFILE:-target}"' in text
+    assert 'ANNOTATION_NUMBER="${ANNOTATION_NUMBER:-}"' in text
+    assert 'ANNOTATION_PREFIX="${ANNOTATION_PREFIX:-}"' in text
+    assert 'MEGAPRS_CHECK_MCMC="${MEGAPRS_CHECK_MCMC:-0}"' in text
+    assert "--check-mcmc" in text
+
+
+def test_write_sdpr_full_train_commands_generates_chr_tasks_and_scoring(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "summary_statistics": {
+                    "cad": {
+                        "file": "cad.tsv.gz",
+                        "accession": "GCSTTEST",
+                        "default_n": 12345,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    train_keep = tmp_path / "train.keep.psam"
+    score_keep = tmp_path / "validation.keep.psam"
+    pd.DataFrame({"#IID": ["T1"]}).to_csv(train_keep, sep="\t", index=False)
+    pd.DataFrame({"#IID": ["V1"]}).to_csv(score_keep, sep="\t", index=False)
+    variant_extract = tmp_path / "hm3plus.snplist"
+    variant_extract.write_text("rs1\n", encoding="utf-8")
+    out_dir = tmp_path / "sdpr"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/write_sdpr_full_train_commands.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--genotype-prefix",
+            "qc/all",
+            "--harmonized-dir",
+            str(tmp_path / "harmonized"),
+            "--train-keep",
+            str(train_keep),
+            "--score-keep",
+            str(score_keep),
+            "--out-dir",
+            str(out_dir),
+            "--variant-extract",
+            str(variant_extract),
+            "--sdpr-bin",
+            "tools/SDPR",
+            "--chromosomes",
+            "21,22",
+            "--m-components",
+            "20",
+            "--n-iter",
+            "50",
+            "--n-burn",
+            "10",
+            "--thin",
+            "2",
+        ],
+        check=True,
+    )
+
+    task_list = out_dir / "cad" / "commands" / "cad.sdpr_full_train.array_tasks.txt"
+    assert len(task_list.read_text(encoding="utf-8").splitlines()) == 2
+    prepare_text = (out_dir / "cad" / "commands" / "cad.sdpr_prepare_reference.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "scripts/prepare_sdpr_inputs.py" in prepare_text
+    assert "-make_ref" in prepare_text
+    assert str(variant_extract) in prepare_text
+    task_text = (out_dir / "cad" / "tasks" / "cad.chr22.sdpr.sh").read_text(encoding="utf-8")
+    assert "-mcmc" in task_text
+    assert "-chr \\\n  22" in task_text
+    assert "-N \\\n  12345" in task_text
+    assert "-valid" in task_text
+    assert "-iter \\\n  50" in task_text
+    score_text = (out_dir / "cad" / "commands" / "cad.sdpr.score.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "scripts/build_sdpr_scorefile.py" in score_text
+    assert "--score" in score_text
+    manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.sdpr_full_train.tasks.csv")
+    assert manifest_out[["disease", "model_scope", "model", "n_gwas"]].to_dict("records") == [
+        {"disease": "cad", "model_scope": "full_train", "model": "sdpr", "n_gwas": 12345}
+    ]
+
+
+def test_write_sdpr_full_train_commands_supports_prebuilt_reference(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "summary_statistics": {
+                    "cad": {
+                        "file": "cad.tsv.gz",
+                        "accession": "GCSTTEST",
+                        "default_n": 12345,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    train_keep = tmp_path / "train.keep.psam"
+    score_keep = tmp_path / "validation.keep.psam"
+    pd.DataFrame({"#IID": ["T1"]}).to_csv(train_keep, sep="\t", index=False)
+    pd.DataFrame({"#IID": ["V1"]}).to_csv(score_keep, sep="\t", index=False)
+    prebuilt_ref = tmp_path / "sdpr_ref"
+    prebuilt_ref.mkdir()
+    out_dir = tmp_path / "sdpr"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/write_sdpr_full_train_commands.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--genotype-prefix",
+            "qc/all",
+            "--harmonized-dir",
+            str(tmp_path / "harmonized"),
+            "--train-keep",
+            str(train_keep),
+            "--score-keep",
+            str(score_keep),
+            "--out-dir",
+            str(out_dir),
+            "--ref-mode",
+            "prebuilt",
+            "--prebuilt-ref-dir",
+            str(prebuilt_ref),
+            "--chromosomes",
+            "22",
+        ],
+        check=True,
+    )
+
+    prepare_text = (out_dir / "cad" / "commands" / "cad.sdpr_prepare_reference.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "Using prebuilt SDPR LD reference" in prepare_text
+    assert "-make_ref" not in prepare_text
+    assert "--raw-sumstats" in prepare_text
+    assert "--valid-bim-out" in prepare_text
+    assert str(prebuilt_ref / "chr22.dat") in prepare_text
+    task_text = (out_dir / "cad" / "tasks" / "cad.chr22.sdpr.sh").read_text(encoding="utf-8")
+    assert f"-ref_dir \\\n  {prebuilt_ref}" in task_text
+    assert "cad.sdpr.valid.bim" in task_text
+    score_text = (out_dir / "cad" / "commands" / "cad.sdpr.score.sh").read_text(encoding="utf-8")
+    assert "--target-id-map" in score_text
+    manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.sdpr_full_train.tasks.csv")
+    assert manifest_out[["ref_mode", "ref_dir", "valid_bim"]].to_dict("records") == [
+        {
+            "ref_mode": "prebuilt",
+            "ref_dir": str(prebuilt_ref),
+            "valid_bim": str(out_dir / "cad" / "inputs" / "cad.sdpr.valid.bim"),
+        }
+    ]
+
+
 def test_write_ldpred2_cv_commands_generates_fold_aware_array_tasks(tmp_path):
     manifest = tmp_path / "manifest.yaml"
     manifest.write_text(
@@ -424,6 +1721,7 @@ def test_write_ldpred2_cv_commands_generates_fold_aware_array_tasks(tmp_path):
                     "cad": {
                         "file": "cad.tsv.gz",
                         "accession": "GCSTTEST",
+                        "default_n": 12345,
                     }
                 }
             }
@@ -439,6 +1737,10 @@ def test_write_ldpred2_cv_commands_generates_fold_aware_array_tasks(tmp_path):
         }
     ).to_csv(splits, index=False)
     out_dir = tmp_path / "ldpred2"
+    variant_extract = tmp_path / "hm3plus.snplist"
+    variant_extract.write_text("rs1\nrs2\n", encoding="utf-8")
+    genetic_map_dir = tmp_path / "genetic_maps"
+    ld_cache_dir = tmp_path / "ld_cache"
 
     subprocess.run(
         [
@@ -464,6 +1766,14 @@ def test_write_ldpred2_cv_commands_generates_fold_aware_array_tasks(tmp_path):
             "0,1",
             "--match-by",
             "position",
+            "--variant-extract",
+            str(variant_extract),
+            "--ld-cache-dir",
+            str(ld_cache_dir),
+            "--genetic-map-dir",
+            str(genetic_map_dir),
+            "--genetic-map-type",
+            "hg38_price",
         ],
         check=True,
     )
@@ -473,19 +1783,530 @@ def test_write_ldpred2_cv_commands_generates_fold_aware_array_tasks(tmp_path):
     assert len(tasks) == 2
     task_text = (out_dir / "cad" / "tasks" / "cad.fold0.ldpred2.sh").read_text(encoding="utf-8")
     assert "--make-bed" in task_text
+    assert "--extract" in task_text
+    assert str(variant_extract) in task_text
     assert "scripts/run_ldpred2_task.R" in task_text
     assert "--h2-grid" in task_text
     assert "--p-grid" in task_text
     assert "--sparse-grid" in task_text
+    assert "--genetic-map-dir" in task_text
+    assert str(genetic_map_dir) in task_text
+    assert "--genetic-map-type" in task_text
+    assert "hg38_price" in task_text
     assert "--join-by-pos" in task_text
     assert "true" in task_text
+    assert "--default-n" in task_text
+    assert "12345" in task_text
     assert "REUSE_LDPRED2_SCORES" in task_text
+    assert "--reuse-ld-corr" in task_text
+    assert "REUSE_LDPRED2_LD" in task_text
+    assert str(ld_cache_dir / "cad" / "cad.fold0.ldpred2_corr") in task_text
     train_keep = pd.read_csv(out_dir / "cad" / "keep" / "cad.fold0.train.keep.psam", sep="\t")
     assert train_keep["#IID"].tolist() == ["P3", "P4"]
     manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.ldpred2_cv.tasks.csv")
     assert manifest_out[["disease", "fold", "n_models"]].to_dict("records") == [
         {"disease": "cad", "fold": 0, "n_models": 2},
         {"disease": "cad", "fold": 1, "n_models": 2},
+    ]
+    assert manifest_out["variant_extract"].tolist() == [str(variant_extract), str(variant_extract)]
+    assert manifest_out["default_n"].tolist() == [12345, 12345]
+    assert manifest_out["ld_cache_dir"].tolist() == [str(ld_cache_dir / "cad"), str(ld_cache_dir / "cad")]
+
+
+def test_write_ldpred2_full_train_commands_generates_full_training_task(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "summary_statistics": {
+                    "cad": {
+                        "file": "cad.tsv.gz",
+                        "accession": "GCSTTEST",
+                        "default_n": 12345,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    train_keep = tmp_path / "train.keep.psam"
+    score_keep = tmp_path / "validation.keep.psam"
+    pd.DataFrame({"#IID": ["T1", "T2"]}).to_csv(train_keep, sep="\t", index=False)
+    pd.DataFrame({"#IID": ["V1", "V2"]}).to_csv(score_keep, sep="\t", index=False)
+    variant_extract = tmp_path / "hm3plus.snplist"
+    variant_extract.write_text("rs1\nrs2\n", encoding="utf-8")
+    ld_cache_dir = tmp_path / "ld_cache"
+    out_dir = tmp_path / "ldpred2_full"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/write_ldpred2_full_train_commands.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--genotype-prefix",
+            "qc/all",
+            "--harmonized-dir",
+            str(tmp_path / "harmonized"),
+            "--train-keep",
+            str(train_keep),
+            "--score-keep",
+            str(score_keep),
+            "--out-dir",
+            str(out_dir),
+            "--h2-grid",
+            "0.1",
+            "--p-grid",
+            "0.01",
+            "--sparse-grid",
+            "0,1",
+            "--variant-extract",
+            str(variant_extract),
+            "--ld-cache-dir",
+            str(ld_cache_dir),
+            "--genetic-map-dir",
+            str(tmp_path / "genetic_maps"),
+        ],
+        check=True,
+    )
+
+    task_list = out_dir / "cad" / "commands" / "cad.ldpred2_full_train.array_tasks.txt"
+    tasks = task_list.read_text(encoding="utf-8").splitlines()
+    assert len(tasks) == 1
+    task_text = (out_dir / "cad" / "tasks" / "cad.full_train.ldpred2.sh").read_text(encoding="utf-8")
+    assert "--model-scope \\\n  full_train" in task_text
+    assert "--fit-score-keep" in task_text
+    assert "--fit-score-out" in task_text
+    assert str(variant_extract) in task_text
+    assert "--reuse-ld-corr" in task_text
+    assert "REUSE_LDPRED2_LD" in task_text
+    assert str(ld_cache_dir / "cad" / "cad.full_train.ldpred2_corr") in task_text
+    assert "--default-n" in task_text
+    assert "12345" in task_text
+    all_keep = pd.read_csv(out_dir / "cad" / "keep" / "cad.full_train.all.keep.psam", sep="\t")
+    assert all_keep["#IID"].tolist() == ["T1", "T2", "V1", "V2"]
+    manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.ldpred2_full_train.tasks.csv")
+    assert manifest_out[["disease", "model_scope", "n_models"]].to_dict("records") == [
+        {"disease": "cad", "model_scope": "full_train", "n_models": 2}
+    ]
+    assert manifest_out["score_file"].str.endswith("ldpred2_scores_long.csv").all()
+    assert manifest_out["fit_score_file"].str.endswith("ldpred2_training_scores_long.csv").all()
+    assert manifest_out["default_n"].tolist() == [12345]
+    assert manifest_out["ld_cache_dir"].tolist() == [str(ld_cache_dir / "cad")]
+
+
+def test_write_ldpred2_full_train_commands_supports_auto_mode(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "summary_statistics": {
+                    "cad": {
+                        "file": "cad.tsv.gz",
+                        "accession": "GCSTTEST",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    train_keep = tmp_path / "train.keep.psam"
+    score_keep = tmp_path / "validation.keep.psam"
+    pd.DataFrame({"#IID": ["T1", "T2"]}).to_csv(train_keep, sep="\t", index=False)
+    pd.DataFrame({"#IID": ["V1", "V2"]}).to_csv(score_keep, sep="\t", index=False)
+    out_dir = tmp_path / "ldpred2_auto"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/write_ldpred2_full_train_commands.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--genotype-prefix",
+            "qc/all",
+            "--harmonized-dir",
+            str(tmp_path / "harmonized"),
+            "--train-keep",
+            str(train_keep),
+            "--score-keep",
+            str(score_keep),
+            "--out-dir",
+            str(out_dir),
+            "--ldpred2-mode",
+            "auto",
+            "--auto-p-init",
+            "0.001,0.01,0.1",
+            "--auto-sparse",
+            "1",
+            "--auto-shrink-corr",
+            "0.95",
+        ],
+        check=True,
+    )
+
+    task_text = (out_dir / "cad" / "tasks" / "cad.full_train.ldpred2.sh").read_text(encoding="utf-8")
+    assert "--ldpred2-mode" in task_text
+    assert "auto" in task_text
+    assert "--auto-p-init" in task_text
+    assert "0.001,0.01,0.1" in task_text
+    assert "--auto-sparse" in task_text
+    assert "--auto-use-mle \\\n  false" in task_text
+    manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.ldpred2_full_train.tasks.csv")
+    assert manifest_out[["ldpred2_mode", "auto_p_init", "auto_use_mle", "n_models"]].to_dict("records") == [
+        {"ldpred2_mode": "auto", "auto_p_init": "0.001,0.01,0.1", "auto_use_mle": False, "n_models": 6}
+    ]
+
+
+def test_ldpred2_auto_slurm_defaults_to_ukbb_reference():
+    text = Path("slurm/ldpred2_auto_full_train.sbatch").read_text(encoding="utf-8")
+
+    assert 'export LD_REFERENCE_MODE="${LD_REFERENCE_MODE:-ukb_hm3_plus}"' in text
+    assert 'export LD_REF_MAP="${LD_REF_MAP:-data/resources/ldpred2/map_hm3_plus.rds}"' in text
+    assert 'export LD_REF_DIR="${LD_REF_DIR:-data/resources/ldpred2/corr_hm3_plus}"' in text
+    assert 'export LD_CACHE_DIR="${LD_CACHE_DIR:-outputs/ldpred2_auto_ukbb_ld_cache}"' in text
+    assert 'export MATCH_BY="${MATCH_BY:-position}"' in text
+    assert 'export REGENERATE_LDPRED2_TASKS="${REGENERATE_LDPRED2_TASKS:-1}"' in text
+    assert "DEFAULT_AUTO_H2_INIT=0.05" in text
+    assert "DEFAULT_AUTO_P_INIT=0.1,0.3,1" in text
+    assert "DEFAULT_AUTO_H2_INIT=0.2" in text
+    assert "DEFAULT_AUTO_P_INIT=0.003,0.01,0.03" in text
+    assert 'export AUTO_USE_MLE="${AUTO_USE_MLE:-0}"' in text
+
+
+def test_write_ldpred2_full_train_commands_supports_ukbb_reference(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "summary_statistics": {
+                    "cad": {
+                        "file": "cad.tsv.gz",
+                        "accession": "GCSTTEST",
+                        "default_n": 12345,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    train_keep = tmp_path / "train.keep.psam"
+    score_keep = tmp_path / "validation.keep.psam"
+    pd.DataFrame({"#IID": ["T1"]}).to_csv(train_keep, sep="\t", index=False)
+    pd.DataFrame({"#IID": ["V1"]}).to_csv(score_keep, sep="\t", index=False)
+    ld_ref_map = tmp_path / "map_hm3_plus.rds"
+    ld_ref_map.write_text("placeholder", encoding="utf-8")
+    ld_ref_dir = tmp_path / "corr_hm3_plus"
+    ld_ref_dir.mkdir()
+    (ld_ref_dir / "LD_with_blocks_chr22.rds").write_text("placeholder", encoding="utf-8")
+    out_dir = tmp_path / "ldpred2_ukbb"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/write_ldpred2_full_train_commands.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--genotype-prefix",
+            "qc/all",
+            "--harmonized-dir",
+            str(tmp_path / "harmonized"),
+            "--train-keep",
+            str(train_keep),
+            "--score-keep",
+            str(score_keep),
+            "--out-dir",
+            str(out_dir),
+            "--h2-grid",
+            "0.1",
+            "--p-grid",
+            "0.01",
+            "--sparse-grid",
+            "0",
+            "--ld-reference-mode",
+            "ukb_hm3_plus",
+            "--ld-ref-map",
+            str(ld_ref_map),
+            "--ld-ref-dir",
+            str(ld_ref_dir),
+            "--match-by",
+            "position",
+        ],
+        check=True,
+    )
+
+    task_text = (out_dir / "cad" / "tasks" / "cad.full_train.ldpred2.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "--ld-reference-mode \\\n  ukb_hm3_plus" in task_text
+    assert "--ld-ref-map" in task_text
+    assert str(ld_ref_map) in task_text
+    assert "--ld-ref-dir" in task_text
+    assert str(ld_ref_dir) in task_text
+    assert "--join-by-pos \\\n  true" in task_text
+    assert "LD_with_blocks_chr22.rds" in task_text
+    manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.ldpred2_full_train.tasks.csv")
+    assert manifest_out[["ld_reference_mode", "ld_ref_map", "ld_ref_dir"]].to_dict("records") == [
+        {
+            "ld_reference_mode": "ukb_hm3_plus",
+            "ld_ref_map": str(ld_ref_map),
+            "ld_ref_dir": str(ld_ref_dir),
+        }
+    ]
+
+
+def test_write_lassosum2_full_train_commands_defaults_to_ukbb_reference(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "summary_statistics": {
+                    "cad": {
+                        "file": "cad.tsv.gz",
+                        "accession": "GCSTTEST",
+                        "default_n": 12345,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    train_keep = tmp_path / "train.keep.psam"
+    score_keep = tmp_path / "validation.keep.psam"
+    pd.DataFrame({"#IID": ["T1"]}).to_csv(train_keep, sep="\t", index=False)
+    pd.DataFrame({"#IID": ["V1"]}).to_csv(score_keep, sep="\t", index=False)
+    ld_ref_map = tmp_path / "map_hm3_plus.rds"
+    ld_ref_map.write_text("placeholder", encoding="utf-8")
+    ld_ref_dir = tmp_path / "corr_hm3_plus"
+    ld_ref_dir.mkdir()
+    (ld_ref_dir / "LD_with_blocks_chr22.rds").write_text("placeholder", encoding="utf-8")
+    variant_extract = tmp_path / "hm3plus.snplist"
+    variant_extract.write_text("rs1\n", encoding="utf-8")
+    out_dir = tmp_path / "lassosum2_ukbb"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/write_lassosum2_full_train_commands.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--genotype-prefix",
+            "qc/all",
+            "--harmonized-dir",
+            str(tmp_path / "harmonized"),
+            "--train-keep",
+            str(train_keep),
+            "--score-keep",
+            str(score_keep),
+            "--out-dir",
+            str(out_dir),
+            "--delta-grid",
+            "0.001,0.01",
+            "--nlambda",
+            "3",
+            "--ld-ref-map",
+            str(ld_ref_map),
+            "--ld-ref-dir",
+            str(ld_ref_dir),
+            "--variant-extract",
+            str(variant_extract),
+        ],
+        check=True,
+    )
+
+    task_text = (out_dir / "cad" / "tasks" / "cad.full_train.lassosum2.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "--ld-reference-mode \\\n  ukb_hm3_plus" in task_text
+    assert "--ld-ref-map" in task_text
+    assert str(ld_ref_map) in task_text
+    assert "--ld-ref-dir" in task_text
+    assert str(ld_ref_dir) in task_text
+    assert "--delta-grid \\\n  0.001,0.01" in task_text
+    assert "--nlambda \\\n  3" in task_text
+    assert "--join-by-pos \\\n  true" in task_text
+    assert "LD_with_blocks_chr22.rds" in task_text
+    manifest_out = pd.read_csv(
+        out_dir / "cad" / "commands" / "cad.lassosum2_full_train.tasks.csv"
+    )
+    assert manifest_out[["ld_reference_mode", "delta_grid", "nlambda", "n_models"]].to_dict(
+        "records"
+    ) == [
+        {
+            "ld_reference_mode": "ukb_hm3_plus",
+            "delta_grid": "0.001,0.01",
+            "nlambda": 3,
+            "n_models": 6,
+        }
+    ]
+
+
+def test_collect_ldpred2_scores_reads_validation_and_training_columns(tmp_path):
+    score = tmp_path / "validation.csv"
+    fit_score = tmp_path / "training.csv"
+    pd.DataFrame(
+        {
+            "sampleid": ["V1", "V2", "V1"],
+            "disease": ["cad", "cad", "cad"],
+            "model_scope": ["full_train", "full_train", "full_train"],
+            "fold": [0, 0, 0],
+            "h2": [0.1, 0.1, 0.2],
+            "p": [0.01, 0.01, 0.001],
+            "sparse": [0, 0, 1],
+            "model": ["h20p1_p0p01_sparse0", "h20p1_p0p01_sparse0", "h20p2_p0p001_sparse1"],
+            "prs": [0.2, -0.2, None],
+        }
+    ).to_csv(score, index=False)
+    pd.DataFrame(
+        {
+            "sampleid": ["T1", "T2", "T1"],
+            "disease": ["cad", "cad", "cad"],
+            "model_scope": ["full_train", "full_train", "full_train"],
+            "fold": [0, 0, 0],
+            "h2": [0.1, 0.1, 0.2],
+            "p": [0.01, 0.01, 0.001],
+            "sparse": [0, 0, 1],
+            "model": ["h20p1_p0p01_sparse0", "h20p1_p0p01_sparse0", "h20p2_p0p001_sparse1"],
+            "prs": [0.3, -0.3, None],
+        }
+    ).to_csv(fit_score, index=False)
+    manifest = tmp_path / "tasks.csv"
+    pd.DataFrame(
+        {
+            "disease": ["cad"],
+            "model_scope": ["full_train"],
+            "score_file": [str(score)],
+            "fit_score_file": [str(fit_score)],
+        }
+    ).to_csv(manifest, index=False)
+    out = tmp_path / "scores.csv"
+    fit_out = tmp_path / "fit_scores.csv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/collect_ldpred2_scores.py",
+            "--task-manifest",
+            str(manifest),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/collect_ldpred2_scores.py",
+            "--task-manifest",
+            str(manifest),
+            "--score-file-column",
+            "fit_score_file",
+            "--out",
+            str(fit_out),
+        ],
+        check=True,
+    )
+
+    validation_scores = pd.read_csv(out)
+    assert validation_scores[["sampleid", "model_scope", "h2", "p", "sparse", "prs"]].to_dict(
+        "records"
+    ) == [
+        {"sampleid": "V1", "model_scope": "full_train", "h2": 0.1, "p": 0.01, "sparse": 0, "prs": 0.2},
+        {"sampleid": "V2", "model_scope": "full_train", "h2": 0.1, "p": 0.01, "sparse": 0, "prs": -0.2},
+    ]
+    fit_scores = pd.read_csv(fit_out)
+    assert fit_scores[["sampleid", "model_scope", "h2", "p", "sparse", "prs"]].to_dict("records") == [
+        {"sampleid": "T1", "model_scope": "full_train", "h2": 0.1, "p": 0.01, "sparse": 0, "prs": 0.3},
+        {"sampleid": "T2", "model_scope": "full_train", "h2": 0.1, "p": 0.01, "sparse": 0, "prs": -0.3},
+    ]
+
+
+def test_collect_lassosum2_scores_reads_validation_and_training_columns(tmp_path):
+    score = tmp_path / "validation.csv"
+    fit_score = tmp_path / "training.csv"
+    pd.DataFrame(
+        {
+            "sampleid": ["V1", "V2"],
+            "disease": ["cad", "cad"],
+            "model_scope": ["full_train", "full_train"],
+            "fold": [0, 0],
+            "delta": [0.001, 0.001],
+            "lambda": [0.02, 0.02],
+            "model": ["delta0p001_lambda0p02", "delta0p001_lambda0p02"],
+            "sparsity": [0.9, 0.9],
+            "num_iter": [20, 20],
+            "prs": [0.2, -0.2],
+        }
+    ).to_csv(score, index=False)
+    pd.DataFrame(
+        {
+            "sampleid": ["T1", "T2"],
+            "disease": ["cad", "cad"],
+            "model_scope": ["full_train", "full_train"],
+            "fold": [0, 0],
+            "delta": [0.001, 0.001],
+            "lambda": [0.02, 0.02],
+            "model": ["delta0p001_lambda0p02", "delta0p001_lambda0p02"],
+            "sparsity": [0.9, 0.9],
+            "num_iter": [20, 20],
+            "prs": [0.3, -0.3],
+        }
+    ).to_csv(fit_score, index=False)
+    manifest = tmp_path / "tasks.csv"
+    pd.DataFrame(
+        {
+            "disease": ["cad"],
+            "model_scope": ["full_train"],
+            "score_file": [str(score)],
+            "fit_score_file": [str(fit_score)],
+        }
+    ).to_csv(manifest, index=False)
+    out = tmp_path / "scores.csv"
+    fit_out = tmp_path / "fit_scores.csv"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/collect_lassosum2_scores.py",
+            "--task-manifest",
+            str(manifest),
+            "--out",
+            str(out),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/collect_lassosum2_scores.py",
+            "--task-manifest",
+            str(manifest),
+            "--score-file-column",
+            "fit_score_file",
+            "--out",
+            str(fit_out),
+        ],
+        check=True,
+    )
+
+    validation_scores = pd.read_csv(out)
+    assert validation_scores[["sampleid", "model_scope", "delta", "lambda", "prs"]].to_dict(
+        "records"
+    ) == [
+        {"sampleid": "V1", "model_scope": "full_train", "delta": 0.001, "lambda": 0.02, "prs": 0.2},
+        {"sampleid": "V2", "model_scope": "full_train", "delta": 0.001, "lambda": 0.02, "prs": -0.2},
+    ]
+    fit_scores = pd.read_csv(fit_out)
+    assert fit_scores[["sampleid", "model_scope", "delta", "lambda", "prs"]].to_dict("records") == [
+        {"sampleid": "T1", "model_scope": "full_train", "delta": 0.001, "lambda": 0.02, "prs": 0.3},
+        {"sampleid": "T2", "model_scope": "full_train", "delta": 0.001, "lambda": 0.02, "prs": -0.3},
     ]
 
 

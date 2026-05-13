@@ -3,7 +3,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=40GB
-#SBATCH --time=00-04:00:00
+#SBATCH --time=04:00:00
 #SBATCH --partition=cpu_short
 #SBATCH --job-name=decipehr_preprocess
 #SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/preprocess/preprocess-%J.log
@@ -39,6 +39,7 @@ export OPENBLAS_NUM_THREADS="$OMP_NUM_THREADS"
 export PYTHONPATH="$REPO_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 
 PHENOTYPE="${PHENOTYPE:-/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Training_Cov_file.txt}"
+VALIDATION_COVARIATES="${VALIDATION_COVARIATES:-/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Testing_Cov_file.txt}"
 PATIENT_COL="${PATIENT_COL:-sampleid}"
 LABELS="${LABELS:-cad,bc,T2D}"
 COVARIATES="${COVARIATES:-sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd}"
@@ -102,6 +103,7 @@ echo "Repo: $REPO_DIR"
 echo "SLURM_JOB_ID: ${SLURM_JOB_ID:-local}"
 echo "SLURM_CPUS_PER_TASK: ${SLURM_CPUS_PER_TASK:-unset}"
 echo "Input phenotype: $PHENOTYPE"
+echo "Validation covariates: $VALIDATION_COVARIATES"
 echo "Prepared phenotype: $PREPARED_PHENOTYPE"
 echo "Labels: $LABELS"
 echo "Covariates: $COVARIATES"
@@ -114,6 +116,7 @@ sinfo -o "%P %G %D %t" || true
 echo ""
 
 test -f "$PHENOTYPE" || { echo "ERROR: Missing phenotype file: $PHENOTYPE" >&2; exit 1; }
+test -f "$VALIDATION_COVARIATES" || { echo "ERROR: Missing validation covariates: $VALIDATION_COVARIATES" >&2; exit 1; }
 test -f "$ELIGIBILITY_CONFIG" || { echo "ERROR: Missing eligibility config: $ELIGIBILITY_CONFIG" >&2; exit 1; }
 
 if [[ "$RUN_UV_SYNC" == "1" ]]; then
@@ -215,6 +218,7 @@ if [[ "$RUN_SAMPLE_SETS" == "1" ]]; then
     uv run --extra dev python scripts/make_sample_sets.py \
       --genotype-psam "$GENOTYPE_SAMPLE_PSAM" \
       --phenotype "$PREPARED_PHENOTYPE" \
+      --validation-covariates "$VALIDATION_COVARIATES" \
       --patient-col "$PATIENT_COL" \
       --out-dir "$SAMPLE_SET_DIR"
   elif [[ "$RUN_GENOTYPE_QC" == "1" ]]; then

@@ -11,6 +11,7 @@ from decipehr.schema import require_columns
 DEFAULT_GENOTYPE_SAMPLE_COLUMNS = ("#IID", "IID", "sampleid", "patient_id")
 LABELED_TRAIN = "labeled_train"
 UNLABELLED_VALIDATION = "unlabelled_validation"
+UNUSED_QC = "unused_qc"
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class SampleSetTables:
     labeled_train_samples: pd.DataFrame
     unlabelled_validation_samples: pd.DataFrame
     phenotype_without_qc_samples: pd.DataFrame
+    validation_without_qc_samples: pd.DataFrame
 
 
 def resolve_sample_column(
@@ -55,6 +57,8 @@ def build_sample_set_tables(
     phenotype: pd.DataFrame,
     patient_col: str,
     genotype_sample_col: str | None = None,
+    validation_samples: pd.DataFrame | None = None,
+    validation_patient_col: str | None = None,
 ) -> SampleSetTables:
     """Split QC genotype samples into labeled training and unlabelled validation sets."""
     sample_col = resolve_sample_column(genotype_samples, genotype_sample_col, "genotype_samples")
@@ -62,16 +66,30 @@ def build_sample_set_tables(
     phenotype_ids = _ordered_unique_sample_ids(phenotype, patient_col, "phenotype")
     phenotype_set = set(phenotype_ids)
     genotype_set = set(genotype_ids)
+    validation_ids: list[str] = []
+    validation_set: set[str] = set()
+    if validation_samples is not None:
+        validation_col = validation_patient_col or patient_col
+        validation_ids = _ordered_unique_sample_ids(validation_samples, validation_col, "validation_samples")
+        validation_set = set(validation_ids)
 
     manifest_rows = []
     for order, sample_id in enumerate(genotype_ids):
         has_phenotype = sample_id in phenotype_set
+        in_validation = sample_id in validation_set
+        if has_phenotype:
+            sample_set = LABELED_TRAIN
+        elif validation_samples is None or in_validation:
+            sample_set = UNLABELLED_VALIDATION
+        else:
+            sample_set = UNUSED_QC
         manifest_rows.append(
             {
                 patient_col: sample_id,
                 "genotype_order": order,
                 "has_phenotype": has_phenotype,
-                "sample_set": LABELED_TRAIN if has_phenotype else UNLABELLED_VALIDATION,
+                "in_validation_covariates": in_validation,
+                "sample_set": sample_set,
             }
         )
     manifest = pd.DataFrame(manifest_rows)
@@ -83,14 +101,18 @@ def build_sample_set_tables(
     ].reset_index(drop=True)
     all_qc = manifest[[patient_col]].copy()
     phenotype_only = pd.DataFrame({patient_col: phenotype_without_qc})
+    validation_without_qc = pd.DataFrame({patient_col: [sample_id for sample_id in validation_ids if sample_id not in genotype_set]})
 
     counts = pd.DataFrame(
         [
             {"sample_set": "all_qc", "n": len(all_qc)},
             {"sample_set": "phenotype", "n": len(phenotype_ids)},
+            {"sample_set": "validation_covariates", "n": len(validation_ids)},
             {"sample_set": LABELED_TRAIN, "n": len(labeled)},
             {"sample_set": UNLABELLED_VALIDATION, "n": len(unlabelled)},
+            {"sample_set": UNUSED_QC, "n": int((manifest["sample_set"] == UNUSED_QC).sum())},
             {"sample_set": "phenotype_without_qc", "n": len(phenotype_only)},
+            {"sample_set": "validation_without_qc", "n": len(validation_without_qc)},
         ]
     )
     return SampleSetTables(
@@ -100,6 +122,7 @@ def build_sample_set_tables(
         labeled_train_samples=labeled,
         unlabelled_validation_samples=unlabelled,
         phenotype_without_qc_samples=phenotype_only,
+        validation_without_qc_samples=validation_without_qc,
     )
 
 
@@ -123,6 +146,7 @@ def write_sample_set_tables(
         "labeled_train_samples": out_dir / "labeled_train_samples.txt",
         "unlabelled_validation_samples": out_dir / "unlabelled_validation_samples.txt",
         "phenotype_without_qc_samples": out_dir / "phenotype_without_qc_samples.txt",
+        "validation_without_qc_samples": out_dir / "validation_without_qc_samples.txt",
         "labeled_train_keep": out_dir / "labeled_train.keep.psam",
         "unlabelled_validation_keep": out_dir / "unlabelled_validation.keep.psam",
     }
@@ -132,6 +156,7 @@ def write_sample_set_tables(
     write_table(tables.labeled_train_samples, paths["labeled_train_samples"])
     write_table(tables.unlabelled_validation_samples, paths["unlabelled_validation_samples"])
     write_table(tables.phenotype_without_qc_samples, paths["phenotype_without_qc_samples"])
+    write_table(tables.validation_without_qc_samples, paths["validation_without_qc_samples"])
     _write_keep_file(tables.labeled_train_samples, patient_col, paths["labeled_train_keep"])
     _write_keep_file(
         tables.unlabelled_validation_samples,

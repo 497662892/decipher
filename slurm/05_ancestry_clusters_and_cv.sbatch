@@ -3,7 +3,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32GB
-#SBATCH --time=00-04:00:00
+#SBATCH --time=04:00:00
 #SBATCH --partition=gpu4_dev
 #SBATCH --job-name=decipehr_jupyter_05
 #SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/notebooks/05_ancestry_clusters_and_cv-%J.log

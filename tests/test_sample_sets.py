@@ -7,6 +7,7 @@ from decipehr.io import read_table
 from decipehr.sample_sets import (
     LABELED_TRAIN,
     UNLABELLED_VALIDATION,
+    UNUSED_QC,
     build_sample_set_tables,
 )
 
@@ -20,11 +21,35 @@ def test_build_sample_set_tables_preserves_genotype_order():
     assert tables.labeled_train_samples["sampleid"].tolist() == ["P1", "P3"]
     assert tables.unlabelled_validation_samples["sampleid"].tolist() == ["P2", "P4"]
     assert tables.phenotype_without_qc_samples["sampleid"].tolist() == ["P5"]
+    assert tables.validation_without_qc_samples["sampleid"].tolist() == []
     assert tables.manifest["sample_set"].tolist() == [
         UNLABELLED_VALIDATION,
         LABELED_TRAIN,
         LABELED_TRAIN,
         UNLABELLED_VALIDATION,
+    ]
+
+
+def test_build_sample_set_tables_can_use_explicit_validation_covariates():
+    genotype = pd.DataFrame({"#IID": ["T1", "V1", "V2", "EXTRA"], "SEX": ["NA"] * 4})
+    phenotype = pd.DataFrame({"sampleid": ["T1"], "cad": [0]})
+    validation = pd.DataFrame({"sampleid": ["V1", "V2", "MISSING"], "age": [1.0, 2.0, 3.0]})
+
+    tables = build_sample_set_tables(
+        genotype,
+        phenotype,
+        patient_col="sampleid",
+        validation_samples=validation,
+    )
+
+    assert tables.labeled_train_samples["sampleid"].tolist() == ["T1"]
+    assert tables.unlabelled_validation_samples["sampleid"].tolist() == ["V1", "V2"]
+    assert tables.validation_without_qc_samples["sampleid"].tolist() == ["MISSING"]
+    assert tables.manifest[["sampleid", "sample_set"]].to_dict("records") == [
+        {"sampleid": "T1", "sample_set": LABELED_TRAIN},
+        {"sampleid": "V1", "sample_set": UNLABELLED_VALIDATION},
+        {"sampleid": "V2", "sample_set": UNLABELLED_VALIDATION},
+        {"sampleid": "EXTRA", "sample_set": UNUSED_QC},
     ]
 
 
@@ -66,9 +91,12 @@ def test_make_sample_sets_cli_writes_manifests_and_keep_files(tmp_path):
     assert dict(zip(counts["sample_set"], counts["n"], strict=True)) == {
         "all_qc": 3,
         "phenotype": 2,
+        "validation_covariates": 0,
         LABELED_TRAIN: 2,
         UNLABELLED_VALIDATION: 1,
+        UNUSED_QC: 0,
         "phenotype_without_qc": 0,
+        "validation_without_qc": 0,
     }
     assert train_keep["#IID"].tolist() == ["P1", "P3"]
     assert validation_keep["#IID"].tolist() == ["P2"]

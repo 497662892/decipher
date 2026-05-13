@@ -7,6 +7,12 @@ summary_statistics:
     pubmed_id: 26343387
     source: GWAS Catalog
     variant_id_strategy: decipehr
+    default_n: 158816
+    default_n_kind: summed_ancestry_effective_sample_size
+    default_n_note: >
+      GCST003116 summary statistics lack per-variant N/N_eff. This value is
+      the sum of ancestry-specific case-control effective sample sizes from the
+      GWAS Catalog initial sample size metadata.
   bc:
     file: GCST90479801.tsv.gz
     accession: GCST90479801
@@ -16,6 +22,15 @@ summary_statistics:
     source: GWAS Catalog
     variant_id_strategy: decipehr
     eligibility_rule: bc
+    default_n: 11777
+    default_n_kind: summed_ancestry_effective_sample_size
+    default_n_note: >
+      MVP GWAS Catalog metadata lists 853/15,733 African American or
+      Afro-Caribbean cases/controls, 2,053/30,661 European cases/controls,
+      and 219/5,790 Hispanic or Latin American cases/controls. This value
+      is the rounded sum of ancestry-specific case-control effective sample
+      sizes, 4/(1/cases + 1/controls). Total sample size is 55,309; European
+      effective sample size is approximately 7,697.
   T2D:
     file: GCST90479885.tsv.gz
     accession: GCST90479885
@@ -24,3 +39,13 @@ summary_statistics:
     pubmed_id: 39024449
     source: GWAS Catalog
     variant_id_strategy: decipehr
+    default_n: 572189
+    default_n_kind: summed_ancestry_effective_sample_size
+    default_n_note: >
+      MVP GWAS Catalog metadata lists 51,551/64,463 African American or
+      Afro-Caribbean cases/controls, 22,274/35,406 Hispanic or Latin American
+      cases/controls, 2,272/4,333 East Asian cases/controls, and
+      154,194/278,454 European cases/controls. This value is the rounded sum
+      of ancestry-specific case-control effective sample sizes,
+      4/(1/cases + 1/controls). Total sample size is 612,947; European
+      effective sample size is approximately 396,960.

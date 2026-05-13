@@ -79,3 +79,6 @@ uv run --extra dev ruff check .
 - Keep commits scoped and descriptive.
 - Do not push private data or bulky generated artifacts.
 
+## sofeware
+
+- You can use 'module avail xxx' to check and 'module load xxx' to load the required software in the HPC

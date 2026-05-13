@@ -3,7 +3,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=48GB
-#SBATCH --time=00-12:00:00
+#SBATCH --time=12:00:00
 #SBATCH --partition=cpu_short
 #SBATCH --array=1-20%2
 #SBATCH --job-name=pt_cv_T2D

@@ -71,6 +71,8 @@ def _labels(args: argparse.Namespace, columns: dict[str, Any]) -> str:
 def _prs_param_cols(model_name: str, value: str | None) -> str:
     if value:
         return ",".join(parse_csv_list(value))
+    if model_name.lower() in {"ldpred2_auto", "ldpred2-auto", "ldpred2auto"}:
+        return "model,h2,p,sparse"
     if model_name.lower() in {"ldpred2", "ldpred2_prs"}:
         return "h2,p,sparse"
     return "clump_r2,p_threshold"

@@ -3,7 +3,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=80GB
-#SBATCH --time=00-08:00:00
+#SBATCH --time=08:00:00
 #SBATCH --partition=cpu_short
 #SBATCH --job-name=sumstats_common_cad
 #SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/sumstats_common/cad/sumstats_common_cad-%J.log

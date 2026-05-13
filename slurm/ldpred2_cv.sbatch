@@ -3,7 +3,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=180GB
-#SBATCH --time=03-00:00:00
+#SBATCH --time=72:00:00
 #SBATCH --partition=cpu_medium
 #SBATCH --array=1-5%1
 #SBATCH --job-name=ldpred2_cv
@@ -27,9 +27,10 @@ fi
 
 cd "$REPO_DIR"
 
+R_MODULE="${R_MODULE:-r/4.5.3}"
 if command -v module >/dev/null 2>&1; then
   module load plink/2.0-20260228 || true
-  module load R || true
+  module load "$R_MODULE" || true
 fi
 if ! command -v plink2 >/dev/null 2>&1 && [[ -x /gpfs/share/apps/plink/2.0-20260228/plink2 ]]; then
   export PATH="/gpfs/share/apps/plink/2.0-20260228:$PATH"
@@ -41,6 +42,8 @@ export OPENBLAS_NUM_THREADS="$OMP_NUM_THREADS"
 export PYTHONUNBUFFERED=1
 export PYTHONPATH="$REPO_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-outputs/uv-cache}"
+export R_LIBS_USER="${R_LIBS_USER:-$REPO_DIR/data/resources/R/4.5.3-library}"
+mkdir -p "$R_LIBS_USER"
 
 MANIFEST="${MANIFEST:-configs/official_sumstats.yaml}"
 SPLITS="${SPLITS:-data/processed/splits/disease_specific_split_seed42.csv}"
@@ -48,6 +51,7 @@ PATIENT_COL="${PATIENT_COL:-sampleid}"
 GENOTYPE_PREFIX="${GENOTYPE_PREFIX:-outputs/genotype_qc/qc_final/all_chromosomes.qc}"
 HARMONIZED_DIR="${HARMONIZED_DIR:-data/processed/sumstats/harmonized}"
 OUT_DIR="${OUT_DIR:-outputs/ldpred2_cv}"
+LD_CACHE_DIR="${LD_CACHE_DIR:-outputs/ldpred2_ld_cache}"
 PLINK2="${PLINK2:-plink2}"
 R_SCRIPT="${R_SCRIPT:-Rscript}"
 LDPRED2_SCRIPT="${LDPRED2_SCRIPT:-scripts/run_ldpred2_task.R}"
@@ -56,10 +60,15 @@ P_GRID="${P_GRID:-0.0001,0.001,0.01,0.1,1}"
 SPARSE_GRID="${SPARSE_GRID:-0,1}"
 LD_WINDOW_CM="${LD_WINDOW_CM:-3}"
 LD_WINDOW_MB="${LD_WINDOW_MB:-3}"
+VARIANT_EXTRACT="${VARIANT_EXTRACT:-data/processed/ldpred2/hm3plus_target.snplist}"
+GENETIC_MAP_DIR="${GENETIC_MAP_DIR:-data/resources/genetic_maps}"
+GENETIC_MAP_TYPE="${GENETIC_MAP_TYPE:-hg38_price}"
+ALLOW_MB_FALLBACK="${ALLOW_MB_FALLBACK:-0}"
 CHROMOSOMES="${CHROMOSOMES:-1-22}"
 MATCH_BY="${MATCH_BY:-id}"
 DEFAULT_N="${DEFAULT_N:-}"
 SAVE_BETA_GRID="${SAVE_BETA_GRID:-0}"
+REGENERATE_LDPRED2_TASKS="${REGENERATE_LDPRED2_TASKS:-0}"
 TASKS_FILE="${TASKS_FILE:-$OUT_DIR/$DISEASE/commands/$DISEASE.ldpred2_cv.array_tasks.txt}"
 LOCK_FILE="$OUT_DIR/$DISEASE/commands/.generate.lock"
 
@@ -78,10 +87,26 @@ SAVE_BETA_ARGS=()
 if [[ "$SAVE_BETA_GRID" == "1" ]]; then
   SAVE_BETA_ARGS=(--save-beta-grid)
 fi
+VARIANT_EXTRACT_ARGS=()
+if [[ -n "$VARIANT_EXTRACT" ]]; then
+  VARIANT_EXTRACT_ARGS=(--variant-extract "$VARIANT_EXTRACT")
+fi
+LD_CACHE_ARGS=()
+if [[ -n "$LD_CACHE_DIR" ]]; then
+  LD_CACHE_ARGS=(--ld-cache-dir "$LD_CACHE_DIR")
+fi
+GENETIC_MAP_ARGS=()
+if [[ -n "$GENETIC_MAP_DIR" ]]; then
+  GENETIC_MAP_ARGS=(--genetic-map-dir "$GENETIC_MAP_DIR")
+fi
+ALLOW_MB_FALLBACK_ARGS=()
+if [[ "$ALLOW_MB_FALLBACK" == "1" ]]; then
+  ALLOW_MB_FALLBACK_ARGS=(--allow-mb-fallback)
+fi
 
 (
   flock 9
-  if [[ ! -s "$TASKS_FILE" ]]; then
+  if [[ ! -s "$TASKS_FILE" || "$REGENERATE_LDPRED2_TASKS" == "1" ]]; then
     uv run --extra dev python -u scripts/write_ldpred2_cv_commands.py \
       --disease "$DISEASE" \
       --manifest "$MANIFEST" \
@@ -98,6 +123,11 @@ fi
       --sparse-grid "$SPARSE_GRID" \
       --ld-window-cm "$LD_WINDOW_CM" \
       --ld-window-mb "$LD_WINDOW_MB" \
+      "${VARIANT_EXTRACT_ARGS[@]}" \
+      "${LD_CACHE_ARGS[@]}" \
+      "${GENETIC_MAP_ARGS[@]}" \
+      --genetic-map-type "$GENETIC_MAP_TYPE" \
+      "${ALLOW_MB_FALLBACK_ARGS[@]}" \
       --chromosomes "$CHROMOSOMES" \
       --threads "$OMP_NUM_THREADS" \
       --match-by "$MATCH_BY" \

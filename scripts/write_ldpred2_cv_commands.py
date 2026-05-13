@@ -75,6 +75,18 @@ def _bool_arg(value: bool) -> str:
     return "true" if value else "false"
 
 
+def _resolve_default_n(cli_default_n: float | None, entry: dict[str, object]) -> float | None:
+    if cli_default_n is not None:
+        return cli_default_n
+    manifest_default = entry.get("default_n")
+    if manifest_default in (None, ""):
+        return None
+    value = float(manifest_default)
+    if value <= 0:
+        raise ValueError("Manifest default_n must be positive")
+    return value
+
+
 def _render_command(tokens: list[str]) -> str:
     return " \\\n  ".join(tokens)
 
@@ -91,6 +103,7 @@ def _task_script(
     train_keep: Path,
     all_keep: Path,
     bed_prefix: Path,
+    variant_extract: Path | None,
     score_file: Path,
     summary_file: Path,
     model_file: Path,
@@ -102,6 +115,9 @@ def _task_script(
     sparse_grid: list[bool],
     ld_window_cm: float,
     ld_window_mb: float,
+    genetic_map_dir: Path | None,
+    genetic_map_type: str,
+    allow_mb_fallback: bool,
     chromosomes: str,
     threads: int,
     default_n: float | None,
@@ -117,6 +133,8 @@ def _task_script(
     ]
     if chromosomes:
         plink_tokens.extend(["--chr", q(chromosomes)])
+    if variant_extract is not None:
+        plink_tokens.extend(["--extract", q(variant_extract)])
     plink_tokens.extend(
         [
             "--make-bed",
@@ -162,13 +180,21 @@ def _task_script(
         f"{ld_window_cm:g}",
         "--ld-window-mb",
         f"{ld_window_mb:g}",
+        "--genetic-map-type",
+        q(genetic_map_type),
         "--threads",
         f'"${{SLURM_CPUS_PER_TASK:-{threads}}}"',
         "--join-by-pos",
         _bool_arg(join_by_pos),
         "--save-beta-grid",
         _bool_arg(save_beta_grid),
+        "--reuse-ld-corr",
+        '"${REUSE_LDPRED2_LD:-1}"',
     ]
+    if genetic_map_dir is not None:
+        r_tokens.extend(["--genetic-map-dir", q(genetic_map_dir)])
+    if allow_mb_fallback:
+        r_tokens.extend(["--allow-mb-fallback", "true"])
     if default_n is not None:
         r_tokens.extend(["--default-n", f"{default_n:g}"])
 
@@ -188,6 +214,13 @@ def _task_script(
             f"test -s {q(harmonized)} || {{ echo 'Missing harmonized sumstats: {harmonized}' >&2; exit 1; }}",
             f"test -s {q(train_keep)} || {{ echo 'Missing training keep file: {train_keep}' >&2; exit 1; }}",
             f"test -s {q(all_keep)} || {{ echo 'Missing scoring keep file: {all_keep}' >&2; exit 1; }}",
+            *(
+                [
+                    f"test -s {q(variant_extract)} || {{ echo 'Missing variant extract file: {variant_extract}' >&2; exit 1; }}"
+                ]
+                if variant_extract is not None
+                else []
+            ),
             "",
             f"if [[ -s {q(score_file)} && \"${{REUSE_LDPRED2_SCORES:-0}}\" == \"1\" ]]; then",
             f"  echo 'Reusing existing LDpred2 scores: {score_file}'",
@@ -228,6 +261,15 @@ def main() -> None:
     parser.add_argument("--sparse-grid", default=_csv_bool(DEFAULT_SPARSE_GRID))
     parser.add_argument("--ld-window-cm", type=float, default=3.0)
     parser.add_argument("--ld-window-mb", type=float, default=3.0)
+    parser.add_argument("--variant-extract", default=None)
+    parser.add_argument(
+        "--ld-cache-dir",
+        default=None,
+        help="Optional shared directory for reusable LD correlation SFBM caches.",
+    )
+    parser.add_argument("--genetic-map-dir", default="data/resources/genetic_maps")
+    parser.add_argument("--genetic-map-type", default="hg38_price")
+    parser.add_argument("--allow-mb-fallback", action="store_true")
     parser.add_argument("--chromosomes", default="1-22")
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--default-n", type=float, default=None)
@@ -240,6 +282,7 @@ def main() -> None:
 
     entry = _manifest_entry(args.manifest, args.disease)
     accession = entry["accession"]
+    default_n = _resolve_default_n(args.default_n, entry)
     harmonized = Path(args.harmonized_dir) / f"{args.disease}.{accession}.harmonized.tsv.gz"
 
     h2_grid = _float_list(args.h2_grid)
@@ -265,7 +308,7 @@ def main() -> None:
     score_dir = out_dir / "scores"
     report_dir = out_dir / "reports"
     model_dir = out_dir / "models"
-    ld_dir = out_dir / "ld"
+    ld_dir = Path(args.ld_cache_dir) / args.disease if args.ld_cache_dir else out_dir / "ld"
     tmp_dir = out_dir / "tmp"
     command_dir = out_dir / "commands"
     for path in [keep_dir, task_dir, bed_dir, score_dir, report_dir, model_dir, ld_dir, tmp_dir, command_dir]:
@@ -278,6 +321,8 @@ def main() -> None:
     manifest_rows = []
     genotype_prefix = Path(args.genotype_prefix)
     ldpred2_script = Path(args.ldpred2_script)
+    variant_extract = Path(args.variant_extract) if args.variant_extract else None
+    genetic_map_dir = Path(args.genetic_map_dir) if args.genetic_map_dir else None
     for fold in sorted(disease_splits["fold"].dropna().astype(int).unique()):
         train_keep = keep_dir / f"{args.disease}.fold{fold}.train.keep.psam"
         val_keep = keep_dir / f"{args.disease}.fold{fold}.val.keep.psam"
@@ -303,6 +348,7 @@ def main() -> None:
                 train_keep=train_keep,
                 all_keep=all_keep,
                 bed_prefix=bed_prefix,
+                variant_extract=variant_extract,
                 score_file=score_file,
                 summary_file=summary_file,
                 model_file=model_file,
@@ -314,9 +360,12 @@ def main() -> None:
                 sparse_grid=sparse_grid,
                 ld_window_cm=args.ld_window_cm,
                 ld_window_mb=args.ld_window_mb,
+                genetic_map_dir=genetic_map_dir,
+                genetic_map_type=args.genetic_map_type,
+                allow_mb_fallback=args.allow_mb_fallback,
                 chromosomes=args.chromosomes,
                 threads=args.threads,
-                default_n=args.default_n,
+                default_n=default_n,
                 join_by_pos=args.match_by == "position",
                 save_beta_grid=args.save_beta_grid,
             ),
@@ -337,11 +386,14 @@ def main() -> None:
                 "all_keep": str(all_keep),
                 "val_keep": str(val_keep),
                 "bed_prefix": str(bed_prefix),
+                "variant_extract": str(variant_extract) if variant_extract is not None else "",
                 "harmonized": str(harmonized),
+                "default_n": default_n if default_n is not None else "",
                 "score_file": str(score_file),
                 "summary_file": str(summary_file),
                 "model_file": str(model_file),
                 "ld_backing_prefix": str(ld_backing_prefix),
+                "ld_cache_dir": str(ld_dir),
             }
         )
 

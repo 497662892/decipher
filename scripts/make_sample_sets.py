@@ -13,7 +13,17 @@ def main() -> None:
     )
     parser.add_argument("--genotype-psam", required=True, help="QC genotype .psam file.")
     parser.add_argument("--phenotype", required=True, help="Prepared phenotype table.")
+    parser.add_argument(
+        "--validation-covariates",
+        default=None,
+        help="Optional official validation covariate table. If provided, validation keep is QC samples in this table.",
+    )
     parser.add_argument("--patient-col", default="patient_id")
+    parser.add_argument(
+        "--validation-patient-col",
+        default=None,
+        help="Patient ID column in --validation-covariates. Defaults to --patient-col.",
+    )
     parser.add_argument(
         "--genotype-sample-col",
         default=None,
@@ -24,11 +34,14 @@ def main() -> None:
 
     genotype_samples = read_table(args.genotype_psam)
     phenotype = read_table(args.phenotype)
+    validation_samples = read_table(args.validation_covariates) if args.validation_covariates else None
     tables = build_sample_set_tables(
         genotype_samples,
         phenotype,
         patient_col=args.patient_col,
         genotype_sample_col=args.genotype_sample_col,
+        validation_samples=validation_samples,
+        validation_patient_col=args.validation_patient_col,
     )
     paths = write_sample_set_tables(tables, args.out_dir, patient_col=args.patient_col)
     print(json.dumps(tables.counts.to_dict("records"), indent=2))

@@ -40,8 +40,12 @@ def main() -> None:
     out["prs"] = pd.to_numeric(out["prs"], errors="coerce")
     out["h2"] = pd.to_numeric(out["h2"], errors="coerce")
     out["p"] = pd.to_numeric(out["p"], errors="coerce")
-    out["sparse"] = pd.to_numeric(out["sparse"], errors="coerce").astype("Int64")
-    out = out.dropna(subset=[args.patient_col, "prs", "h2", "p", "sparse"])
+    out["sparse"] = pd.to_numeric(out["sparse"], errors="coerce")
+    invalid = out[[args.patient_col, "prs", "h2", "p", "sparse"]].isna().any(axis=1)
+    if invalid.any():
+        examples = out.loc[invalid, [args.patient_col, "prs", "h2", "p", "sparse"]].head(5)
+        raise ValueError(f"Invalid LDpred2 score rows detected: {examples.to_dict('records')}")
+    out["sparse"] = out["sparse"].astype("Int64")
     columns = [
         args.patient_col,
         "disease",

@@ -3,7 +3,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=16GB
-#SBATCH --time=00-04:00:00
+#SBATCH --time=04:00:00
 #SBATCH --partition=deciphehr
 #SBATCH --job-name=pt_cv_eval
 #SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/pt_cv/eval/pt_cv_eval-%J.log

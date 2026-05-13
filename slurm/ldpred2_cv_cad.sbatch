@@ -3,7 +3,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=180GB
-#SBATCH --time=03-00:00:00
+#SBATCH --time=72:00:00
 #SBATCH --partition=cpu_medium
 #SBATCH --array=1-5%1
 #SBATCH --job-name=ldpred2_cv_cad

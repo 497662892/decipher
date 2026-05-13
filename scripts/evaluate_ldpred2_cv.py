@@ -95,7 +95,21 @@ def main() -> None:
                     f"Missing LDpred2 scores for disease={args.disease}, fold={fold}, "
                     f"h2={h2}, p={p_value}, sparse={sparse}"
                 )
-            scored = data.merge(fold_scores, on=patient_col, how="inner")
+            missing_scores = data.loc[~data[patient_col].isin(fold_scores[patient_col]), patient_col]
+            if not missing_scores.empty:
+                raise ValueError(
+                    f"LDpred2 scores are missing {len(missing_scores)} eligible patients for "
+                    f"disease={args.disease}, fold={fold}, h2={h2}, p={p_value}, sparse={sparse}. "
+                    f"Examples: {missing_scores.head(5).tolist()}"
+                )
+            scored = data.merge(fold_scores, on=patient_col, how="left", validate="one_to_one")
+            if scored["prs"].isna().any():
+                examples = scored.loc[scored["prs"].isna(), patient_col].head(5).tolist()
+                raise ValueError(
+                    f"LDpred2 scores contain missing PRS values after merge for "
+                    f"disease={args.disease}, fold={fold}, h2={h2}, p={p_value}, sparse={sparse}: "
+                    f"{examples}"
+                )
             train = scored.loc[scored["fold"].astype(int) != fold].copy()
             val = scored.loc[scored["fold"].astype(int) == fold].copy()
             if train.empty or val.empty:
