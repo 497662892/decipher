@@ -21,6 +21,7 @@ from decipehr.onekg import (
     normalize_1000g_panel,
     one_kg_vcf_name,
     parse_chromosomes,
+    pfile_paths,
     write_json,
 )
 
@@ -67,7 +68,7 @@ def file_ready(path: Path) -> bool:
 
 
 def pfile_ready(prefix: Path) -> bool:
-    return all(file_ready(prefix.with_suffix(suffix)) for suffix in [".pgen", ".pvar", ".psam"])
+    return all(file_ready(path) for path in pfile_paths(prefix))
 
 
 def choose_download_tool(requested: str) -> str:

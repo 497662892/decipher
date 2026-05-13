@@ -104,6 +104,11 @@ def normalize_1000g_panel(panel_in: Path, panel_out: Path, keep_out: Path) -> di
     }
 
 
+def pfile_paths(prefix: Path) -> tuple[Path, Path, Path]:
+    """Return PLINK2 pgen/pvar/psam paths for a file prefix."""
+    return tuple(Path(str(prefix) + suffix) for suffix in (".pgen", ".pvar", ".psam"))
+
+
 def build_plink_convert_command(
     *,
     plink2: str,

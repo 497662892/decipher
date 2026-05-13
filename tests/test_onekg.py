@@ -10,6 +10,7 @@ from decipehr.onekg import (
     normalize_1000g_panel,
     one_kg_vcf_name,
     parse_chromosomes,
+    pfile_paths,
 )
 
 
@@ -46,6 +47,14 @@ def test_normalize_1000g_panel_writes_panel_and_keep(tmp_path: Path) -> None:
         "HG00001\tHG00001",
         "HG00002\tHG00002",
     ]
+
+
+def test_pfile_paths_append_suffixes_to_dotted_prefixes() -> None:
+    assert pfile_paths(Path("pgen/chr1.1000g_GRCh38")) == (
+        Path("pgen/chr1.1000g_GRCh38.pgen"),
+        Path("pgen/chr1.1000g_GRCh38.pvar"),
+        Path("pgen/chr1.1000g_GRCh38.psam"),
+    )
 
 
 def test_build_plink_convert_command_uses_stable_variant_ids() -> None:
