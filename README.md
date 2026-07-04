@@ -13,6 +13,15 @@ Private competition data, genotype files, phenotype files, summary statistics,
 model outputs, and submissions are not included. Keep them in ignored local
 folders such as `data/`, `outputs/`, `models/`, and `submissions/`.
 
+## Key Idea
+
+The main modeling strategy is disease-specific PRS integration. Instead of
+choosing only one PRS score, the pipeline builds multiple candidate PRS families,
+selects useful inputs per disease, and uses TabPFN-3 to combine selected PRS
+scores with covariates (`sex`, `age_sd`, and ancestry PCs). The resulting
+TabPFN score is then evaluated through the same official logistic validation
+interface as the single-PRS baselines.
+
 ## Pipeline
 
 The workflow has three layers:
