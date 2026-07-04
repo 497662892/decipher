@@ -43,14 +43,11 @@ The workflow has three layers:
 Primary metric: `OR90`, the odds ratio comparing the top 10% of scores against
 the lower 90%. AUC is included as a familiar diagnostic.
 
-The table separates three different questions:
+The main held-out table uses the same official logistic validation interface:
 
-- **Score-only**: rank validation samples by the PRS or TabPFN score directly.
-  No `sex`, `age_sd`, or PC covariates are used.
-- **Covariates only**: official validation logistic model using covariates but
-  no PRS.
-- **Score + covariates**: official validation logistic model using covariates
-  plus one PRS or ensemble score.
+- **Covariates only**: logistic model using covariates but no PRS score.
+- **Model score + covariates**: logistic model using one PRS or ensemble score
+  plus `sex`, `age_sd`, and `PC1_sd` to `PC10_sd`.
 - Breast cancer metrics use the female-only eligibility rule in
   `configs/disease_eligibility.yaml`.
 
@@ -59,29 +56,31 @@ The table separates three different questions:
 | Disease | Method | AUC | OR90 |
 |---|---|---:|---:|
 | CAD | Covariates only | 0.791 | 5.05 |
-| CAD | P+T soft-z, score only | 0.551 | 1.55 |
-| CAD | TabPFN-3, PRS scores only | 0.576 | 1.53 |
-| CAD | MegaPRS annotated + covariates | 0.795 | 5.92 |
-| CAD | Final TabPFN-3 + covariates | 0.809 | 7.49 |
+| CAD | Best single PRS: MegaPRS annotated + covariates | 0.795 | 5.92 |
+| CAD | TabPFN-3 PRS-only score + covariates | 0.791 | 5.05 |
+| CAD | Final TabPFN-3 score + covariates | 0.809 | 7.49 |
 | BC | Covariates only | 0.614 | 1.43 |
-| BC | lassosum2 soft-z, score only | 0.585 | 1.96 |
-| BC | TabPFN-3, PRS scores only | 0.572 | 2.02 |
-| BC | lassosum2 + covariates | 0.644 | 2.09 |
-| BC | Final TabPFN-3 + covariates | 0.662 | 2.46 |
+| BC | Best single PRS: lassosum2 + covariates | 0.644 | 2.09 |
+| BC | TabPFN-3 PRS-only score + covariates | 0.628 | 1.77 |
+| BC | Final TabPFN-3 score + covariates | 0.662 | 2.46 |
 | T2D | Covariates only | 0.705 | 4.30 |
-| T2D | MegaPRS annotated raw, score only | 0.647 | 3.65 |
-| T2D | TabPFN-3, PRS scores only | 0.636 | 2.29 |
-| T2D | MegaPRS annotated + covariates | 0.741 | 6.90 |
-| T2D | Final TabPFN-3 + covariates | 0.763 | 8.04 |
+| T2D | Best single PRS: MegaPRS annotated + covariates | 0.741 | 6.90 |
+| T2D | TabPFN-3 PRS-only score + covariates | 0.732 | 5.75 |
+| T2D | Final TabPFN-3 score + covariates | 0.763 | 8.04 |
 
 Main takeaways:
 
-- Raw PRS scores alone carried useful signal, especially for T2D, but were not
-  competitive with covariate-adjusted models.
-- The PRS-only TabPFN-3 baseline was important as a sanity check: it tested
-  whether nonlinear ensembling of PRS scores alone was enough. It was not.
-- Most of the final gain came from combining selected PRS families with
-  `sex`, `age_sd`, and `PC1_sd` to `PC10_sd`.
+- The PRS-only TabPFN-3 baseline was the key nonlinear-ensemble baseline: it
+  used only PRS features inside TabPFN, then entered the same logistic
+  validation interface as the other model scores.
+- Best single PRS baselines are also shown through the same logistic interface,
+  making them comparable to the ensemble scores.
+- The final gain came from disease-specific PRS selection plus a TabPFN score
+  trained with both selected PRS and covariate features.
+
+Direct score-only ranking checks were also useful during development, but they
+are not the main comparison because they do not use the official logistic
+validation interface.
 
 ### Final Selection Check
 
