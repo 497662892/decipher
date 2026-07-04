@@ -18,7 +18,7 @@ folders such as `data/`, `outputs/`, `models/`, and `submissions/`.
 The workflow has three layers:
 
 1. **Preprocessing**
-   - Build audited train, validation, train-val, and holdout sample sets.
+   - Build audited train, official validation, and final test sample sets.
    - Run genotype QC with PLINK2.
    - Harmonize allowed summary statistics to:
      `SNP, CHR, BP, A1, A2, P, BETA`, with optional `SE` and `N`.
@@ -36,14 +36,15 @@ The workflow has three layers:
    - Select one validation-tuned candidate from each PRS family.
    - Build long-format PRS inputs.
    - Compare linear/ridge stacking and TabPFN-3 ensembles.
-   - Use one shared patient-level 5-fold split for fair train-val comparison.
+   - When using cross-validation, use one shared patient-level 5-fold split for
+     fair method comparison.
 
 ## Validation Summary
 
 Primary metric: `OR90`, the odds ratio comparing the top 10% of scores against
 the lower 90%. AUC is included as a familiar diagnostic.
 
-The main held-out table uses the same official logistic validation interface:
+The main validation table uses the same official logistic validation interface:
 
 - **Covariates only**: logistic model using covariates but no PRS score.
 - **Model score + covariates**: logistic model using one PRS or ensemble score
@@ -51,7 +52,7 @@ The main held-out table uses the same official logistic validation interface:
 - Breast cancer metrics use the female-only eligibility rule in
   `configs/disease_eligibility.yaml`.
 
-### Held-Out Validation Baselines
+### Official Validation Baselines
 
 **CAD**
 
@@ -94,23 +95,9 @@ Direct score-only ranking checks were also useful during development, but they
 are not the main comparison because they do not use the official logistic
 validation interface.
 
-### Final Selection Check
-
-These rows compare the final disease-specific input set on shared train-val
-5-fold predictions and on the held-out validation split.
-
-| Disease | Evaluation | AUC | OR90 |
-|---|---|---:|---:|
-| CAD | Train-val 5CV | 0.796 | 6.95 |
-| CAD | Held-out validation | 0.809 | 7.49 |
-| BC | Train-val 5CV | 0.642 | 1.75 |
-| BC | Held-out validation | 0.662 | 2.46 |
-| T2D | Train-val 5CV | 0.750 | 6.54 |
-| T2D | Held-out validation | 0.763 | 8.04 |
-
 The final selected setting was not simply "use every PRS". Disease-specific
-input dropping improved or stabilized the train-val comparison, then the same
-input set was carried into the final holdout pipeline.
+input dropping was used to choose the final PRS families, then the selected
+input set was carried into the final scoring pipeline.
 
 ## Final Model
 
@@ -129,11 +116,12 @@ Final scoring:
 - TabPFN-3 with `clip_eps=0.001` and `n_estimators=16`.
 - TabPFN input features: selected PRS family scores plus `sex`, `age_sd`, and
   `PC1_sd` to `PC10_sd`.
-- Train-val scores: shared 5-fold out-of-fold TabPFN logits.
-- Holdout scores: TabPFN logits using all eligible train-val patients as
+- Official validation scores: evaluated through the logistic validation
+  interface reported above.
+- Final test scores: TabPFN logits using the available labeled samples as
   context.
-- Standardization: disease-specific mean/sd from train-val 5-fold OOF logits.
-- Holdout samples were not used for model selection or standardization.
+- Final test samples were prediction-only and were not used for model
+  selection.
 
 ## Repository Layout
 
@@ -220,7 +208,7 @@ uv run python scripts/make_sample_sets.py \
   --out-dir data/processed/sample_sets
 ```
 
-Final-phase train-val/holdout setup:
+Final-phase labeled/test setup:
 
 ```bash
 uv run python scripts/prepare_final_trainval_test.py \
@@ -296,7 +284,7 @@ uv run python scripts/build_ensemble_prs.py \
   --out-dir outputs/ensemble/cad
 ```
 
-TabPFN and final train-val wrappers:
+TabPFN and final-phase wrappers:
 
 - `slurm/tabpfn_ensemble.sbatch`
 - `slurm/final_trainval_tabpfn_cv.sbatch`
@@ -314,7 +302,7 @@ uv run python scripts/collect_model_performance.py \
   --wide-out outputs/performance/model_performance.wide.csv
 ```
 
-### 7. Run the Final Holdout Pipeline
+### 7. Run the Final Prediction Pipeline
 
 ```bash
 uv run python scripts/run_final_tabpfn_oof_holdout_pipeline.py \
@@ -335,7 +323,7 @@ Slurm wrapper: `slurm/final_tabpfn_oof_holdout_pipeline.sbatch`.
 - Never put the same patient in more than one fold.
 - Fit imputers, scalers, PRS parameters, model parameters, and ensemble weights
   using training folds only.
-- Validation folds and holdout samples are prediction-only.
+- Validation and final test samples are prediction-only.
 - Use `configs/disease_eligibility.yaml` for disease eligibility.
 - If summary statistics are derived from internal training labels, regenerate
   them inside each outer fold using only training-fold patients.
