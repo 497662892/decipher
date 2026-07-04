@@ -90,6 +90,33 @@ The main validation table uses the same official logistic validation interface:
 | TabPFN-3 PRS-only score + covariates | 0.732 | 5.75 |
 | Final TabPFN-3 score + covariates | 0.763 | 8.04 |
 
+Best single PRS settings in the table:
+
+| Disease | Single PRS baseline | PRS hyperparameters |
+|---|---|---|
+| CAD | MegaPRS annotated | `model=megaprs_bayesr` |
+| BC | lassosum2 | `delta=1`, `lambda=0.0125357276756835` |
+| T2D | MegaPRS annotated | `model=megaprs_bayesr` |
+
+All three rows use the same validation wrapper: PRS score plus `sex`, `age_sd`,
+and `PC1_sd` to `PC10_sd`, fitted with
+`LogisticRegression(solver="lbfgs", max_iter=2000, class_weight=None)`.
+
+Summary statistics used for PRS construction:
+
+| Disease | Source | Accession | Expected raw file | Trait | PubMed ID | Default `N` used when needed |
+|---|---|---|---|---|---|---:|
+| CAD | GWAS Catalog | `GCST003116` | `26343387-GCST003116-EFO_0000378.h.tsv.gz` | Coronary artery disease | `26343387` | 158,816 |
+| BC | GWAS Catalog | `GCST90479801` | `GCST90479801.tsv.gz` | Breast cancer [female] / PheCode 174.1 | `39024449` | 11,777 |
+| T2D | GWAS Catalog | `GCST90479885` | `GCST90479885.tsv.gz` | Type 2 diabetes / PheCode 250.2 | `39024449` | 572,189 |
+
+These files are configured in `configs/official_sumstats.yaml`, standardized to
+`SNP, CHR, BP, A1, A2, P, BETA` plus optional `SE` and `N`, then harmonized to
+the target genotype variants before P+T, LDpred2, PRS-CS, lassosum2, SDPR,
+sBayesRC, and MegaPRS scoring. When per-variant `N` was unavailable, the
+default `N` above was used as the summed ancestry-specific effective sample size
+recorded in the manifest.
+
 Main takeaways:
 
 - The PRS-only TabPFN-3 baseline was the key nonlinear-ensemble baseline: it
