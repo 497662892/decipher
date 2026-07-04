@@ -104,11 +104,11 @@ and `PC1_sd` to `PC10_sd`, fitted with
 
 Summary statistics used for PRS construction:
 
-| Disease | Source | Accession | Expected raw file | Trait | PubMed ID | Default `N` used when needed |
-|---|---|---|---|---|---|---:|
-| CAD | GWAS Catalog | `GCST003116` | `26343387-GCST003116-EFO_0000378.h.tsv.gz` | Coronary artery disease | `26343387` | 158,816 |
-| BC | GWAS Catalog | `GCST90479801` | `GCST90479801.tsv.gz` | Breast cancer [female] / PheCode 174.1 | `39024449` | 11,777 |
-| T2D | GWAS Catalog | `GCST90479885` | `GCST90479885.tsv.gz` | Type 2 diabetes / PheCode 250.2 | `39024449` | 572,189 |
+| Disease | Source | Accession | Trait | PubMed ID | Default `N` used when needed |
+|---|---|---|---|---|---:|
+| CAD | GWAS Catalog | `GCST003116` | Coronary artery disease | `26343387` | 158,816 |
+| BC | GWAS Catalog | `GCST90479801` | Breast cancer [female] / PheCode 174.1 | `39024449` | 11,777 |
+| T2D | GWAS Catalog | `GCST90479885` | Type 2 diabetes / PheCode 250.2 | `39024449` | 572,189 |
 
 These files are configured in `configs/official_sumstats.yaml`, standardized to
 `SNP, CHR, BP, A1, A2, P, BETA` plus optional `SE` and `N`, then harmonized to
