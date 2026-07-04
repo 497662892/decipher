@@ -12,6 +12,9 @@ build/
 # Jupyter
 .ipynb_checkpoints/
 
+# Local/private competition documents
+docs/*.docx
+
 # Private competition data and generated artifacts
 data/
 outputs/
@@ -31,6 +34,8 @@ submissions/
 *.parquet
 
 # Logs and local secrets
+logs/
+.codex
 *.log
 .env
 .env.*
