@@ -22,7 +22,10 @@ Core groups:
 - Single PRS families: `pt_*`, `ldpred2_*`, `prscs_*`, `lassosum2_*`,
   `sdpr_*`, `sbayesrc_*`, and `megaprs_*`.
 - TabPFN ensembles: `tabpfn_ensemble.sbatch`, `final_trainval_tabpfn_*.sbatch`.
-- Final holdout pipeline: `final_tabpfn_oof_holdout_pipeline.sbatch`.
+- Final prediction pipeline: `final_tabpfn_oof_holdout_pipeline.sbatch`.
+
+Some wrapper names retain the original challenge wording, such as `trainval` or
+`holdout`, because they match the script interfaces.
 
 Cluster-specific settings such as partitions, modules, and tool paths may need
 local edits. Keep private data paths in environment variables or local config

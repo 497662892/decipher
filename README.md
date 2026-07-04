@@ -163,6 +163,23 @@ External tools are installed separately:
 
 On HPC, use `module avail <tool>` and `module load <tool>` as needed.
 
+## Local Inputs Needed
+
+The repository does not include private competition inputs. To run the pipeline
+end to end, provide local paths for:
+
+- PLINK2-compatible genotype files for labeled, validation, and final test
+  samples.
+- Phenotype/covariate tables with sample IDs, labels where available, `sex`,
+  `age_sd`, and `PC1_sd` to `PC10_sd`.
+- Official or otherwise allowed GWAS summary statistics for each PRS method.
+- Method-specific resources such as LD reference panels, external binaries,
+  and ancestry reference files.
+
+The example commands below assume these inputs are linked under `data/raw/` and
+that local paths are configured in `configs/default.yaml`, `configs/qc.yaml`,
+and `configs/official_sumstats.yaml`.
+
 ## Step-by-Step Use
 
 Create local artifact folders:
