@@ -21,6 +21,15 @@ def main() -> None:
     parser.add_argument("--sumstats-root", required=True)
     parser.add_argument("--target-pvar", required=True)
     parser.add_argument("--out-dir", default="data/processed/sumstats")
+    parser.add_argument(
+        "--standardized-source-dir",
+        default=None,
+        help=(
+            "Optional directory containing precomputed standardized sumstats. "
+            "When set, standardized files are read from this directory and only "
+            "harmonized outputs/reports are written under --out-dir."
+        ),
+    )
     parser.add_argument("--chunksize", type=int, default=250_000)
     parser.add_argument("--target-pvar-chunksize", type=int, default=1_000_000)
     parser.add_argument("--reuse-standardized", action="store_true")
@@ -41,8 +50,16 @@ def main() -> None:
     harmonized = out_dir / "harmonized" / f"{args.disease}.{accession}.harmonized.tsv.gz"
     report = out_dir / "reports" / f"{args.disease}.{accession}.harmonized.summary.json"
 
-    if args.reuse_standardized and standardized.exists() and standardized.stat().st_size > 0:
-        print(f"Reusing standardized sumstats: {standardized}")
+    if args.standardized_source_dir:
+        standardized_input = (
+            Path(args.standardized_source_dir) / f"{args.disease}.{accession}.standardized.tsv.gz"
+        )
+        if not standardized_input.exists() or standardized_input.stat().st_size == 0:
+            raise FileNotFoundError(f"Missing standardized source file: {standardized_input}")
+        print(f"Using standardized sumstats source: {standardized_input}")
+    elif args.reuse_standardized and standardized.exists() and standardized.stat().st_size > 0:
+        standardized_input = standardized
+        print(f"Reusing standardized sumstats: {standardized_input}")
     else:
         n_standardized = standardize_sumstats_file_streaming(
             raw_sumstats,
@@ -51,9 +68,10 @@ def main() -> None:
             variant_id_strategy=variant_id_strategy,
         )
         print(f"Wrote {n_standardized} standardized variants to {standardized}")
+        standardized_input = standardized
 
     common, summary = harmonize_sumstats_common_from_files(
-        standardized,
+        standardized_input,
         args.target_pvar,
         target_pvar_chunksize=args.target_pvar_chunksize,
     )

@@ -20,8 +20,15 @@ def main() -> None:
     parser.add_argument("--sumstats-root", required=True)
     parser.add_argument("--target-pvar", required=True, help="QC target PLINK2 .pvar.")
     parser.add_argument("--out-dir", default="data/processed/sumstats")
+    parser.add_argument(
+        "--standardized-source-dir",
+        default=None,
+        help="Optional directory containing precomputed standardized sumstats to reuse.",
+    )
     parser.add_argument("--out", required=True)
     parser.add_argument("--chunksize", type=int, default=250_000)
+    parser.add_argument("--target-pvar-chunksize", type=int, default=1_000_000)
+    parser.add_argument("--reuse-standardized", action="store_true")
     args = parser.parse_args()
 
     manifest = load_yaml(args.manifest).get("summary_statistics", {})
@@ -46,18 +53,35 @@ def main() -> None:
         if not isinstance(entry, dict):
             raise ValueError(f"Manifest entry for {disease} must be a mapping")
         raw_sumstats = Path(args.sumstats_root) / entry["file"]
-        lines.extend(
-            [
-                "",
-                f"test -s {q(raw_sumstats)} || {{ echo 'Missing sumstats: {raw_sumstats}' >&2; exit 1; }}",
-                (
-                    f"python scripts/prepare_sumstats_common.py --disease {q(disease)} "
-                    f"--manifest {q(args.manifest)} --sumstats-root {q(args.sumstats_root)} "
-                    f"--target-pvar {q(args.target_pvar)} --out-dir {q(out_dir)} "
-                    f"--chunksize {args.chunksize}"
-                ),
-            ]
+        command = (
+            f"python scripts/prepare_sumstats_common.py --disease {q(disease)} "
+            f"--manifest {q(args.manifest)} --sumstats-root {q(args.sumstats_root)} "
+            f"--target-pvar {q(args.target_pvar)} --out-dir {q(out_dir)} "
+            f"--chunksize {args.chunksize} --target-pvar-chunksize {args.target_pvar_chunksize}"
         )
+        if args.standardized_source_dir:
+            accession = entry["accession"]
+            standardized_source = (
+                Path(args.standardized_source_dir) / f"{disease}.{accession}.standardized.tsv.gz"
+            )
+            command += f" --standardized-source-dir {q(args.standardized_source_dir)}"
+        else:
+            standardized_source = None
+        if args.reuse_standardized:
+            command += " --reuse-standardized"
+
+        lines.append("")
+        if standardized_source is not None:
+            lines.append(
+                f"test -s {q(standardized_source)} || "
+                f"{{ echo 'Missing standardized source: {standardized_source}' >&2; exit 1; }}"
+            )
+        else:
+            lines.append(
+                f"test -s {q(raw_sumstats)} || "
+                f"{{ echo 'Missing sumstats: {raw_sumstats}' >&2; exit 1; }}"
+            )
+        lines.append(command)
 
     path = Path(args.out)
     path.parent.mkdir(parents=True, exist_ok=True)

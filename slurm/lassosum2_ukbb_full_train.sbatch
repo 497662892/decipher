@@ -7,15 +7,15 @@
 #SBATCH --partition=cpu_medium
 #SBATCH --array=1-1%1
 #SBATCH --job-name=lassosum2_ukbb_full
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/lassosum2_ukbb_full_train/%x-%A_%a.log
+#SBATCH --output=logs/lassosum2_ukbb_full_train/%x-%A_%a.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DISEASE="${DISEASE:-}"
 
-if [[ -f /gpfs/home/jm10850/.bashrc ]]; then
-  source /gpfs/home/jm10850/.bashrc
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
+  source "$HOME/.bashrc"
 fi
 
 set -u
@@ -32,8 +32,8 @@ if command -v module >/dev/null 2>&1; then
   module load plink/2.0-20260228 || true
   module load "$R_MODULE" || true
 fi
-if ! command -v plink2 >/dev/null 2>&1 && [[ -x /gpfs/share/apps/plink/2.0-20260228/plink2 ]]; then
-  export PATH="/gpfs/share/apps/plink/2.0-20260228:$PATH"
+if ! command -v plink2 >/dev/null 2>&1 && [[ -n "${PLINK2_DIR:-}" && -x "$PLINK2_DIR/plink2" ]]; then
+  export PATH="$PLINK2_DIR:$PATH"
 fi
 
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-8}"
@@ -48,6 +48,8 @@ mkdir -p "$R_LIBS_USER"
 MANIFEST="${MANIFEST:-configs/official_sumstats.yaml}"
 PATIENT_COL="${PATIENT_COL:-sampleid}"
 GENOTYPE_PREFIX="${GENOTYPE_PREFIX:-outputs/genotype_qc/qc_final/all_chromosomes.qc}"
+SCORE_GENOTYPE_PREFIX="${SCORE_GENOTYPE_PREFIX:-$GENOTYPE_PREFIX}"
+FIT_SCORE_GENOTYPE_PREFIX="${FIT_SCORE_GENOTYPE_PREFIX:-$GENOTYPE_PREFIX}"
 HARMONIZED_DIR="${HARMONIZED_DIR:-data/processed/sumstats/harmonized}"
 TRAIN_KEEP="${TRAIN_KEEP:-data/processed/sample_sets/labeled_train.keep.psam}"
 SCORE_KEEP="${SCORE_KEEP:-data/processed/sample_sets/unlabelled_validation.keep.psam}"
@@ -111,6 +113,8 @@ fi
       --manifest "$MANIFEST" \
       --patient-col "$PATIENT_COL" \
       --genotype-prefix "$GENOTYPE_PREFIX" \
+      --score-genotype-prefix "$SCORE_GENOTYPE_PREFIX" \
+      --fit-score-genotype-prefix "$FIT_SCORE_GENOTYPE_PREFIX" \
       --harmonized-dir "$HARMONIZED_DIR" \
       --train-keep "$TRAIN_KEEP" \
       --score-keep "$SCORE_KEEP" \

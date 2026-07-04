@@ -4,17 +4,17 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=24GB
 #SBATCH --time=08:00:00
-#SBATCH --partition=deciphehr
+#SBATCH --partition=gl40s_short
 #SBATCH --job-name=ldpred2_cv_eval
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/ldpred2_cv/eval/ldpred2_cv_eval-%J.log
+#SBATCH --output=logs/ldpred2_cv/eval/ldpred2_cv_eval-%J.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DISEASE="${DISEASE:-}"
 
-if [[ -f /gpfs/home/jm10850/.bashrc ]]; then
-  source /gpfs/home/jm10850/.bashrc
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
+  source "$HOME/.bashrc"
 fi
 
 set -u
@@ -75,3 +75,4 @@ uv run --extra dev python -u scripts/evaluate_ldpred2_cv.py \
 echo "Finished LDpred2 CV evaluation for $DISEASE at $(date)"
 echo "Summary metrics: $EVAL_OUT_DIR/summary_metrics.csv"
 echo "Best by method: $EVAL_OUT_DIR/best_by_method.csv"
+echo "Best primary full model: $EVAL_OUT_DIR/best_primary_model.csv"

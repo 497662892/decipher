@@ -169,6 +169,8 @@ def _score_script(
     score_file: Path,
     score_summary: Path,
     genotype_prefix: Path,
+    score_genotype_prefix: Path,
+    fit_score_genotype_prefix: Path,
     score_keep: Path,
     fit_score_keep: Path,
     score_prefix: Path,
@@ -194,6 +196,12 @@ def _score_script(
         f"test -f {q(str(genotype_prefix) + '.pgen')} || {{ echo 'Missing {genotype_prefix}.pgen' >&2; exit 1; }}",
         f"test -f {q(str(genotype_prefix) + '.pvar')} || {{ echo 'Missing {genotype_prefix}.pvar' >&2; exit 1; }}",
         f"test -f {q(str(genotype_prefix) + '.psam')} || {{ echo 'Missing {genotype_prefix}.psam' >&2; exit 1; }}",
+        f"test -f {q(str(score_genotype_prefix) + '.pgen')} || {{ echo 'Missing {score_genotype_prefix}.pgen' >&2; exit 1; }}",
+        f"test -f {q(str(score_genotype_prefix) + '.pvar')} || {{ echo 'Missing {score_genotype_prefix}.pvar' >&2; exit 1; }}",
+        f"test -f {q(str(score_genotype_prefix) + '.psam')} || {{ echo 'Missing {score_genotype_prefix}.psam' >&2; exit 1; }}",
+        f"test -f {q(str(fit_score_genotype_prefix) + '.pgen')} || {{ echo 'Missing {fit_score_genotype_prefix}.pgen' >&2; exit 1; }}",
+        f"test -f {q(str(fit_score_genotype_prefix) + '.pvar')} || {{ echo 'Missing {fit_score_genotype_prefix}.pvar' >&2; exit 1; }}",
+        f"test -f {q(str(fit_score_genotype_prefix) + '.psam')} || {{ echo 'Missing {fit_score_genotype_prefix}.psam' >&2; exit 1; }}",
         f"test -s {q(score_keep)} || {{ echo 'Missing scoring keep file: {score_keep}' >&2; exit 1; }}",
         f"test -s {q(fit_score_keep)} || {{ echo 'Missing model-fit scoring keep file: {fit_score_keep}' >&2; exit 1; }}",
         "",
@@ -205,12 +213,12 @@ def _score_script(
             f"--summary-out {q(score_summary)}"
         ),
         (
-            f"{q(plink2)} --pfile {q(genotype_prefix)} --keep {q(score_keep)} "
+            f"{q(plink2)} --pfile {q(score_genotype_prefix)} --keep {q(score_keep)} "
             f"--score {q(score_file)} 1 2 3 header-read cols=+scoresums "
             f"--threads \"${{SLURM_CPUS_PER_TASK:-{threads}}}\" --out {q(score_prefix)}"
         ),
         (
-            f"{q(plink2)} --pfile {q(genotype_prefix)} --keep {q(fit_score_keep)} "
+            f"{q(plink2)} --pfile {q(fit_score_genotype_prefix)} --keep {q(fit_score_keep)} "
             f"--score {q(score_file)} 1 2 3 header-read cols=+scoresums "
             f"--threads \"${{SLURM_CPUS_PER_TASK:-{threads}}}\" --out {q(fit_score_prefix)}"
         ),
@@ -228,6 +236,16 @@ def main() -> None:
     parser.add_argument("--manifest", default="configs/official_sumstats.yaml")
     parser.add_argument("--sumstats-root", required=True)
     parser.add_argument("--genotype-prefix", default="outputs/genotype_qc/qc_final/all_chromosomes.qc")
+    parser.add_argument(
+        "--score-genotype-prefix",
+        default=None,
+        help="PGEN prefix used for final scoring. Defaults to --genotype-prefix.",
+    )
+    parser.add_argument(
+        "--fit-score-genotype-prefix",
+        default=None,
+        help="PGEN prefix used for fitting/calibrating the validation model. Defaults to --genotype-prefix.",
+    )
     parser.add_argument("--harmonized-dir", default="data/processed/sumstats/harmonized")
     parser.add_argument("--train-keep", default="data/processed/sample_sets/labeled_train.keep.psam")
     parser.add_argument("--score-keep", default="data/processed/sample_sets/unlabelled_validation.keep.psam")
@@ -293,6 +311,12 @@ def main() -> None:
     manifest_rows = []
     score_scripts = []
     genotype_prefix = Path(args.genotype_prefix)
+    score_genotype_prefix = (
+        Path(args.score_genotype_prefix) if args.score_genotype_prefix else genotype_prefix
+    )
+    fit_score_genotype_prefix = (
+        Path(args.fit_score_genotype_prefix) if args.fit_score_genotype_prefix else genotype_prefix
+    )
     score_keep = Path(args.score_keep)
     fit_score_keep = Path(args.fit_score_keep) if args.fit_score_keep else Path(args.train_keep)
     for phi in phi_values:
@@ -336,6 +360,8 @@ def main() -> None:
                 score_file=score_file,
                 score_summary=scorefile_dir / f"{args.disease}.{tag}.score.summary.json",
                 genotype_prefix=genotype_prefix,
+                score_genotype_prefix=score_genotype_prefix,
+                fit_score_genotype_prefix=fit_score_genotype_prefix,
                 score_keep=score_keep,
                 fit_score_keep=fit_score_keep,
                 score_prefix=score_prefix,
@@ -359,6 +385,9 @@ def main() -> None:
                 "chromosomes": ",".join(chromosomes),
                 "prepare_script": str(prepare),
                 "score_script": str(score_script),
+                "genotype_prefix": str(genotype_prefix),
+                "score_genotype_prefix": str(score_genotype_prefix),
+                "fit_score_genotype_prefix": str(fit_score_genotype_prefix),
                 "target_id_map": str(_append_suffix(input_prefix, ".target_id_map.tsv")),
                 "score_file": str(score_file),
                 "sscore": str(score_prefix) + ".sscore",

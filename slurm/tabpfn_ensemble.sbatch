@@ -7,15 +7,15 @@
 #SBATCH --partition=deciphehr
 #SBATCH --gres=gpu:1
 #SBATCH --job-name=tabpfn_ensemble
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/tabpfn_ensemble/%x-%J.log
+#SBATCH --output=logs/tabpfn_ensemble/%x-%J.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$REPO_DIR"
 
-if [[ -f /gpfs/home/jm10850/.bashrc ]]; then
-  source /gpfs/home/jm10850/.bashrc
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
+  source "$HOME/.bashrc"
 fi
 
 TABPFN_ENV_FILE="${TABPFN_ENV_FILE:-$REPO_DIR/.env.tabpfn}"

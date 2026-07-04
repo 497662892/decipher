@@ -75,6 +75,52 @@ def make_patient_folds(
     return out.sort_values([patient_col]).reset_index(drop=True)
 
 
+def make_balanced_patient_folds(
+    phenotype: pd.DataFrame,
+    patient_col: str,
+    label_cols: list[str],
+    categorical_cols: list[str],
+    mean_cols: list[str] | None = None,
+    n_folds: int = 5,
+    seed: int = 42,
+    n_seed_candidates: int = 100,
+) -> pd.DataFrame:
+    """Create one shared patient-level fold split balanced on labels and categories."""
+    if n_folds < 2:
+        raise ValueError("n_folds must be at least 2")
+    mean_cols = mean_cols or []
+    require_columns(phenotype, [patient_col, *label_cols, *categorical_cols, *mean_cols], "phenotype")
+    validate_binary_labels(phenotype, label_cols)
+    aggregations: dict[str, Any] = {label: "max" for label in label_cols}
+    aggregations.update({column: "first" for column in [*categorical_cols, *mean_cols]})
+    patients = phenotype[[patient_col, *label_cols, *categorical_cols, *mean_cols]].groupby(
+        patient_col,
+        as_index=False,
+    ).agg(aggregations)
+    if len(patients) < n_folds:
+        raise ValueError(f"Need at least {n_folds} patients, observed {len(patients)}")
+
+    if label_cols:
+        patients["_diagnostic_label"] = patients[label_cols].astype(int).astype(str).agg("_".join, axis=1)
+        patients["_diagnostic_burden"] = patients[label_cols].astype(int).sum(axis=1).clip(upper=2).astype(str)
+    else:
+        patients["_diagnostic_label"] = "all"
+        patients["_diagnostic_burden"] = "0"
+
+    strata_cols = [*categorical_cols, "_diagnostic_burden", "_diagnostic_label"]
+    categorical_balance_cols = [*categorical_cols, "_diagnostic_label", *label_cols]
+    patients["fold"] = _choose_balanced_folds(
+        patients,
+        strata_cols=strata_cols,
+        categorical_balance_cols=categorical_balance_cols,
+        mean_balance_cols=mean_cols,
+        n_folds=n_folds,
+        seed=seed,
+        n_seed_candidates=n_seed_candidates,
+    )
+    return patients[[patient_col, "fold"]].sort_values(patient_col).reset_index(drop=True)
+
+
 def _age_bins(series: pd.Series, n_bins: int = 3) -> pd.Series:
     age = pd.to_numeric(series, errors="coerce")
     if age.isna().any():
@@ -259,6 +305,48 @@ def summarize_folds(
     for label in label_cols:
         label_counts[label] = merged.groupby("fold")[label].sum().astype(int).sort_index().to_dict()
     return SplitSummary(folds[patient_col].nunique(), folds["fold"].nunique(), label_counts)
+
+
+def patient_fold_balance_report(
+    phenotype: pd.DataFrame,
+    folds: pd.DataFrame,
+    patient_col: str,
+    label_cols: list[str],
+    categorical_cols: list[str] | None = None,
+    mean_cols: list[str] | None = None,
+) -> pd.DataFrame:
+    require_columns(folds, [patient_col, "fold"], "folds")
+    categorical_cols = categorical_cols or []
+    mean_cols = mean_cols or []
+    require_columns(phenotype, [patient_col, *label_cols, *categorical_cols, *mean_cols], "phenotype")
+    merged = phenotype[[patient_col, *label_cols, *categorical_cols, *mean_cols]].merge(
+        folds[[patient_col, "fold"]],
+        on=patient_col,
+        how="inner",
+    )
+    category_values = {
+        column: sorted(merged[column].dropna().astype(str).unique().tolist()) for column in categorical_cols
+    }
+    rows: list[dict[str, float | int | str]] = []
+    for fold, frame in merged.groupby("fold", sort=True):
+        row: dict[str, float | int | str] = {
+            "fold": int(fold),
+            "n": int(len(frame)),
+        }
+        for label in label_cols:
+            values = pd.to_numeric(frame[label], errors="coerce")
+            row[f"{label}_cases"] = int(values.sum())
+            row[f"{label}_prevalence"] = float(values.mean())
+        for column in categorical_cols:
+            counts = frame[column].astype(str).value_counts()
+            for value in category_values[column]:
+                count = int(counts.get(value, 0))
+                row[f"{column}_{value}_n"] = count
+                row[f"{column}_{value}_prop"] = count / len(frame) if len(frame) else float("nan")
+        for column in mean_cols:
+            row[f"{column}_mean"] = float(pd.to_numeric(frame[column], errors="coerce").mean())
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def summarize_disease_folds(

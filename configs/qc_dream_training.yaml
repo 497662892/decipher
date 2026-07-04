@@ -32,9 +32,9 @@ prs_alignment:
 
 paths:
   plink2: plink2
-  raw_pgen_dir: /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/genotype_files/plink_files
+  raw_pgen_dir: data/raw/training_phase/genotype_files/plink_files
   raw_pgen_pattern: Testing_Chr{chr}
-  info_score_dir: /gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/supplementary_files/info_scores
+  info_score_dir: data/raw/training_phase/supplementary_files/info_scores
   info_score_pattern: All_Samples_InfoScore_v02_chr{chr}.txt.gz
   qc_work_dir: outputs/genotype_qc
   gwas_sumstats: null

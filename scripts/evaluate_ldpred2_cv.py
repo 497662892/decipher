@@ -165,13 +165,23 @@ def main() -> None:
         summary_rows.append(row)
     summary = pd.DataFrame(summary_rows)
     write_table(summary, out_dir / "summary_metrics.csv")
-    if "top10_vs_lower90_or" in summary.columns:
+    if {"auc", "nagelkerke_r2"}.issubset(summary.columns):
         best = summary.sort_values(
-            ["method", "top10_vs_lower90_or", "nagelkerke_r2"],
+            ["method", "auc", "nagelkerke_r2"],
             ascending=[True, False, False],
             kind="mergesort",
         ).groupby("method", as_index=False).head(1)
         write_table(best, out_dir / "best_by_method.csv")
+        primary_method = "ldpred2_prs_covariate" if covariates else "ldpred2_prs_only"
+        primary = summary.loc[summary["method"] == primary_method].copy()
+        if not primary.empty:
+            write_table(primary, out_dir / "primary_metrics.csv")
+            best_primary = primary.sort_values(
+                ["auc", "nagelkerke_r2"],
+                ascending=[False, False],
+                kind="mergesort",
+            ).head(1)
+            write_table(best_primary, out_dir / "best_primary_model.csv")
     (out_dir / "summary.json").write_text(
         json.dumps(summary_rows, indent=2, sort_keys=True),
         encoding="utf-8",

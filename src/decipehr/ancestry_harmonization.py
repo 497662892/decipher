@@ -11,7 +11,6 @@ from decipehr.io import ensure_parent, write_table
 from decipehr.schema import require_columns
 from decipehr.sumstats_harmonization import (
     VALID_ALLELES,
-    is_ambiguous,
     normalize_allele,
     normalize_chrom,
 )
@@ -40,9 +39,20 @@ def _pvar_skiprows(path: str | Path) -> int:
 
 def read_pvar_variants(path: str | Path) -> pd.DataFrame:
     """Read a PLINK2 .pvar as an unordered variant/allele table for reference matching."""
-    pvar = pd.read_csv(path, sep=r"\s+", engine="python", skiprows=_pvar_skiprows(path))
+    wanted = {"#CHROM", "CHROM", "POS", "ID", "REF", "ALT"}
+    skiprows = _pvar_skiprows(path)
+    pvar = pd.read_csv(
+        path,
+        sep="\t",
+        skiprows=skiprows,
+        usecols=lambda column: column in wanted,
+    )
     if "CHROM" in pvar.columns and "#CHROM" not in pvar.columns:
         pvar = pvar.rename(columns={"CHROM": "#CHROM"})
+    if not {"#CHROM", "POS", "ID", "REF", "ALT"}.issubset(pvar.columns):
+        pvar = pd.read_csv(path, sep=r"\s+", engine="python", skiprows=_pvar_skiprows(path))
+        if "CHROM" in pvar.columns and "#CHROM" not in pvar.columns:
+            pvar = pvar.rename(columns={"CHROM": "#CHROM"})
     require_columns(pvar, ["#CHROM", "POS", "ID", "REF", "ALT"], "pvar")
     return pd.DataFrame(
         {
@@ -149,7 +159,12 @@ def prepare_reference_variants(
     frame = frame.loc[~same_allele].copy()
 
     if remove_ambiguous:
-        ambiguous = frame.apply(lambda row: is_ambiguous(str(row["A1_NORM"]), str(row["A2_NORM"])), axis=1)
+        ambiguous = (
+            ((frame["A1_NORM"] == "A") & (frame["A2_NORM"] == "T"))
+            | ((frame["A1_NORM"] == "T") & (frame["A2_NORM"] == "A"))
+            | ((frame["A1_NORM"] == "C") & (frame["A2_NORM"] == "G"))
+            | ((frame["A1_NORM"] == "G") & (frame["A2_NORM"] == "C"))
+        )
         summary["n_removed_ambiguous"] = int(ambiguous.sum())
         frame = frame.loc[~ambiguous].copy()
 

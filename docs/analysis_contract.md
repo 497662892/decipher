@@ -4,7 +4,7 @@ This file records the project rules that should be confirmed from the official P
 
 ## Competition Entities
 
-- Diseases: confirm the three official disease labels, case/control coding, and any exclusion rules from `DREAM_data_V1.pdf` and `04_09 decipEHR project.pdf`.
+- Diseases: confirm the three official disease labels, case/control coding, and any exclusion rules from the competition documentation.
 - Patient key: use one canonical patient identifier across phenotype, covariates, genotype, folds, PRS scores, predictions, and submission files.
 - Outcome type: treat each disease as a binary prediction task unless the official documentation states otherwise.
 - Official metric: use the competition metric for model selection; keep AUC, AUPRC, Brier score, OR per SD, and risk-stratification ORs as internal diagnostics.
@@ -52,4 +52,3 @@ Project code should only do orchestration, schema validation, fold generation, c
 - Treat PRS performance as predictive association, not causality.
 - Report uncertainty and caveats for low case counts, class imbalance, ancestry mismatch, and phenotype ambiguity.
 - Do not compare methods using a validation set that was also used for parameter selection without clearly labeling it as exploratory.
-

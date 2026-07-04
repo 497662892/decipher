@@ -6,7 +6,7 @@
 #SBATCH --time 00-04:00:00
 #SBATCH --partition=gpu4_dev
 #SBATCH --job-name jupyter-notebook
-#SBATCH --output /gpfs/data/shenlab/Jiajian/jupyter-notebook-%J.log
+#SBATCH --output logs/jupyter-notebook-%J.log
 
 # Thank you, Yale Center for Research Computing, for this script  #SBATCH --gres=gpu:1                 # 指定 GPU 数量
 # modified for use on BigPurple in NYU Langone Medical Center by Paul Glick
@@ -51,27 +51,20 @@ http://localhost:${port}  (prefix w/ https:// if using password)
 Use the token string from the URL printed below and add it to the URL above
 "
 
-# load modules or conda environments here
-# e.g. farnam:
-# module load Python/2.7.13-foss-2016b
-#module add python/gpu/3.6.5
-# module add anaconda2/gpu/5.2.0
-# module add anaconda3/cpu/5.3.1
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
+  source "$HOME/.bashrc"
+fi
 
-# module load gcc/8.1.0
+if [[ -n "${CONDA_ENV:-}" ]]; then
+  source activate "$CONDA_ENV"
+fi
 
-# STEP #1: replace the bashrc with your bashrc
-source /gpfs/home/jm10850/.bashrc
+WORKDIR="${WORKDIR:-$PWD}"
+cd "$WORKDIR"
 
-# STEP #2: activate the conda env
-source activate preprocessing
+if [[ -n "${JUPYTER_MODULES:-}" ]]; then
+  # shellcheck disable=SC2086
+  module load $JUPYTER_MODULES
+fi
 
-# STEP #3: cd to your workspace under /gpfs/data/shenlab/xxxx
-cd /gpfs/data/shenlab/Jiajian
-
-module load cuda/9.0
-module load fsl/6.0.7
-module load ants/2.4.2
-
-# STEP #4: start the jupyter notebook
 jupyter-notebook --no-browser --port=${port} --ip=${node}

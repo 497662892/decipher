@@ -6,11 +6,11 @@
 #SBATCH --time=04:00:00
 #SBATCH --partition=gpu4_dev
 #SBATCH --job-name=decipehr_jupyter_05
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/notebooks/05_ancestry_clusters_and_cv-%J.log
+#SBATCH --output=logs/notebooks/05_ancestry_clusters_and_cv-%J.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 NOTEBOOK_DIR="${NOTEBOOK_DIR:-$REPO_DIR}"
 PORT="${PORT:-8890}"
 RUN_UV_SYNC="${RUN_UV_SYNC:-0}"
@@ -18,10 +18,10 @@ UV_CACHE_DIR="${UV_CACHE_DIR:-outputs/uv-cache}"
 
 cd "$REPO_DIR"
 
-if [[ -f /gpfs/home/jm10850/.bashrc ]]; then
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
   # BigPurple's /etc/bashrc is not nounset-safe; mirror jupyter.sbatch by
   # sourcing the user shell environment before enabling `set -u`.
-  source /gpfs/home/jm10850/.bashrc
+  source "$HOME/.bashrc"
 fi
 
 set -u

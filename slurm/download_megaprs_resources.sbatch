@@ -6,11 +6,11 @@
 #SBATCH --time=04:00:00
 #SBATCH --partition=data_mover
 #SBATCH --job-name=download_megaprs
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/resources/download_megaprs-%J.log
+#SBATCH --output=logs/resources/download_megaprs-%J.log
 
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 RESOURCE_DIR="${RESOURCE_DIR:-data/resources/megaprs}"
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-$RESOURCE_DIR/downloads}"
 LDAK_VERSION="${LDAK_VERSION:-6.2}"

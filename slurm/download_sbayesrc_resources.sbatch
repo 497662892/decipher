@@ -6,11 +6,11 @@
 #SBATCH --time=24:00:00
 #SBATCH --partition=cpu_long
 #SBATCH --job-name=sbayesrc_resources
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/sbayesrc_resources/%x-%J.log
+#SBATCH --output=logs/sbayesrc_resources/%x-%J.log
 
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$REPO_DIR"
 
 RESOURCE_DIR="${RESOURCE_DIR:-data/resources/sbayesrc}"

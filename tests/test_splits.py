@@ -1,6 +1,10 @@
 import pandas as pd
 
-from decipehr.splits import make_disease_specific_folds, make_patient_folds
+from decipehr.splits import (
+    make_balanced_patient_folds,
+    make_disease_specific_folds,
+    make_patient_folds,
+)
 
 
 def test_make_patient_folds_assigns_each_patient_once():
@@ -15,6 +19,35 @@ def test_make_patient_folds_assigns_each_patient_once():
     folds = make_patient_folds(df, "patient_id", ["d1", "d2", "d3"], n_folds=5, seed=42)
     assert len(folds) == 40
     assert folds["patient_id"].nunique() == 40
+    assert set(folds["fold"]) == {0, 1, 2, 3, 4}
+
+
+def test_make_balanced_patient_folds_uses_categories_and_diagnostic_labels():
+    rows = []
+    for i in range(120):
+        rows.append(
+            {
+                "patient_id": f"P{i:03d}",
+                "cad": i % 2,
+                "bc": (i // 2) % 2,
+                "T2D": (i // 4) % 2,
+                "hard_label": ["AFR-like", "EUR-like", "AMR-like"][i % 3],
+            }
+        )
+    df = pd.DataFrame(rows)
+
+    folds = make_balanced_patient_folds(
+        df,
+        patient_col="patient_id",
+        label_cols=["cad", "bc", "T2D"],
+        categorical_cols=["hard_label"],
+        n_folds=5,
+        seed=42,
+        n_seed_candidates=10,
+    )
+
+    assert len(folds) == 120
+    assert folds["patient_id"].nunique() == 120
     assert set(folds["fold"]) == {0, 1, 2, 3, 4}
 
 

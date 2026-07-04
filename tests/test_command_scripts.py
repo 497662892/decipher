@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -281,6 +282,11 @@ def test_write_sumstats_common_commands_keeps_method_specific_steps_out(tmp_path
             "qc/all.pvar",
             "--out-dir",
             str(tmp_path / "processed" / "sumstats"),
+            "--standardized-source-dir",
+            str(tmp_path / "processed" / "existing_standardized"),
+            "--target-pvar-chunksize",
+            "500000",
+            "--reuse-standardized",
             "--out",
             str(out),
         ],
@@ -290,6 +296,9 @@ def test_write_sumstats_common_commands_keeps_method_specific_steps_out(tmp_path
     text = out.read_text(encoding="utf-8")
     assert "scripts/prepare_sumstats_common.py" in text
     assert "--disease cad" in text
+    assert "--standardized-source-dir" in text
+    assert "--target-pvar-chunksize 500000" in text
+    assert "--reuse-standardized" in text
     assert "--clump" not in text
     assert "--score" not in text
 
@@ -387,6 +396,10 @@ def test_write_pt_full_train_commands_generates_full_training_tasks(tmp_path):
             str(manifest),
             "--genotype-prefix",
             "qc/all",
+            "--score-genotype-prefix",
+            "qc/test",
+            "--fit-score-genotype-prefix",
+            "qc/trainval",
             "--harmonized-dir",
             str(tmp_path / "harmonized"),
             "--train-keep",
@@ -408,6 +421,9 @@ def test_write_pt_full_train_commands_generates_full_training_tasks(tmp_path):
     task_text = (out_dir / "cad" / "tasks" / "cad.full_train.r20p2.sh").read_text(encoding="utf-8")
     assert f"--keep {train_keep}" in task_text
     assert f"--keep {score_keep}" in task_text
+    assert "--pfile qc/all --keep" in task_text
+    assert "--pfile qc/test --keep" in task_text
+    assert "--pfile qc/trainval --keep" in task_text
     assert task_text.count("--score-col-nums 3 4") == 2
     manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.pt_full_train.tasks.csv")
     assert manifest_out[["disease", "model_scope", "clump_r2"]].to_dict("records") == [
@@ -648,6 +664,10 @@ def test_write_prscs_full_train_commands_generates_chr_tasks_and_scoring(tmp_pat
             "sumstats",
             "--genotype-prefix",
             "qc/all",
+            "--score-genotype-prefix",
+            "qc/test",
+            "--fit-score-genotype-prefix",
+            "qc/trainval",
             "--harmonized-dir",
             str(tmp_path / "harmonized"),
             "--out-dir",
@@ -688,6 +708,8 @@ def test_write_prscs_full_train_commands_generates_chr_tasks_and_scoring(tmp_pat
     )
     assert "scripts/build_prscs_scorefile.py" in score_text
     assert "--score" in score_text
+    assert "--pfile qc/test" in score_text
+    assert "--pfile qc/trainval" in score_text
     manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.prscs_full_train.tasks.csv")
     assert manifest_out[["disease", "model_scope", "phi", "n_gwas"]].to_dict("records") == [
         {"disease": "cad", "model_scope": "full_train", "phi": "auto", "n_gwas": 12345},
@@ -702,6 +724,18 @@ def test_prscs_bc_slurm_defaults_include_auto_phi():
     assert 'export PHI_GRID="${PHI_GRID:-auto,1e-6,1e-4,1e-2}"' in prepare_text
     assert 'export PHI_GRID="${PHI_GRID:-auto,1e-6,1e-4,1e-2}"' in train_text
     assert "#SBATCH --array=1-88%22" in train_text
+
+
+def test_full_train_slurm_passes_separate_score_genotype_prefixes():
+    pt_text = Path("slurm/pt_full_train.sbatch").read_text(encoding="utf-8")
+    prscs_text = Path("slurm/prscs_prepare_inputs.sbatch").read_text(encoding="utf-8")
+    sdpr_text = Path("slurm/sdpr_prepare_reference.sbatch").read_text(encoding="utf-8")
+
+    for text in [pt_text, prscs_text, sdpr_text]:
+        assert "SCORE_GENOTYPE_PREFIX" in text
+        assert "FIT_SCORE_GENOTYPE_PREFIX" in text
+        assert "--score-genotype-prefix" in text
+        assert "--fit-score-genotype-prefix" in text
 
 
 def test_prepare_sdpr_inputs_writes_default_n_and_deduplicates(tmp_path):
@@ -1110,6 +1144,10 @@ def test_write_sbayesrc_full_train_commands_generates_workflow(tmp_path):
             str(tmp_path / "sumstats"),
             "--genotype-prefix",
             "qc/all",
+            "--score-genotype-prefix",
+            "qc/validation",
+            "--fit-score-genotype-prefix",
+            "qc/train_fit",
             "--harmonized-dir",
             str(tmp_path / "harmonized"),
             "--train-keep",
@@ -1155,10 +1193,14 @@ def test_write_sbayesrc_full_train_commands_generates_workflow(tmp_path):
     score_text = (command_dir / "cad.sbayesrc.score.sh").read_text(encoding="utf-8")
     assert "scripts/build_sbayesrc_scorefile.py" in score_text
     assert "--score" in score_text
+    assert "--pfile qc/validation --keep" in score_text
+    assert "--pfile qc/train_fit --keep" in score_text
     manifest_out = pd.read_csv(command_dir / "cad.sbayesrc_full_train.tasks.csv")
     assert manifest_out[["disease", "model_scope", "model", "n_gwas"]].to_dict("records") == [
         {"disease": "cad", "model_scope": "full_train", "model": "sbayesrc", "n_gwas": 12345.0}
     ]
+    assert manifest_out.loc[0, "score_genotype_prefix"] == "qc/validation"
+    assert manifest_out.loc[0, "fit_score_genotype_prefix"] == "qc/train_fit"
 
 
 def test_sbayesrc_slurm_allows_empty_variant_extract_override():
@@ -1166,7 +1208,11 @@ def test_sbayesrc_slurm_allows_empty_variant_extract_override():
 
     assert 'VARIANT_EXTRACT_DEFAULT="${VARIANT_EXTRACT_DEFAULT:-data/processed/ldpred2/hm3plus_target.snplist}"' in text
     assert 'VARIANT_EXTRACT="${VARIANT_EXTRACT-$VARIANT_EXTRACT_DEFAULT}"' in text
+    assert 'SCORE_GENOTYPE_PREFIX="${SCORE_GENOTYPE_PREFIX:-$GENOTYPE_PREFIX}"' in text
+    assert 'FIT_SCORE_GENOTYPE_PREFIX="${FIT_SCORE_GENOTYPE_PREFIX:-$GENOTYPE_PREFIX}"' in text
     assert 'if [[ -n "$VARIANT_EXTRACT" ]]; then' in text
+    assert "--score-genotype-prefix" in text
+    assert "--fit-score-genotype-prefix" in text
 
 
 def test_prepare_megaprs_inputs_writes_ldak_summary_format(tmp_path):
@@ -1412,6 +1458,10 @@ def test_write_megaprs_full_train_commands_generates_workflow(tmp_path):
             str(manifest),
             "--genotype-prefix",
             "qc/all",
+            "--score-genotype-prefix",
+            "qc/validation",
+            "--fit-score-genotype-prefix",
+            "qc/train_fit",
             "--harmonized-dir",
             str(tmp_path / "harmonized"),
             "--train-keep",
@@ -1473,10 +1523,14 @@ def test_write_megaprs_full_train_commands_generates_workflow(tmp_path):
     assert "--MCMC-solve \\\n  YES" in task_text
     score_text = (command_dir / "cad.megaprs.score.sh").read_text(encoding="utf-8")
     assert "scripts/build_megaprs_scorefile.py" in score_text
+    assert "--pfile qc/validation --keep" in score_text
+    assert "--pfile qc/train_fit --keep" in score_text
     manifest_out = pd.read_csv(command_dir / "cad.megaprs_full_train.tasks.csv")
     assert manifest_out[["disease", "model_scope", "model", "n_gwas"]].to_dict("records") == [
         {"disease": "cad", "model_scope": "full_train", "model": "megaprs_bayesr", "n_gwas": 12345.0}
     ]
+    assert manifest_out.loc[0, "score_genotype_prefix"] == "qc/validation"
+    assert manifest_out.loc[0, "fit_score_genotype_prefix"] == "qc/train_fit"
     pre_cors_text = (command_dir / "cad.megaprs.pre_cors.sh").read_text(encoding="utf-8")
     assert pre_cors_text.index("cad.megaprs.prepare_sumstats.sh") < pre_cors_text.index(
         "cad.megaprs.make_reference.sh"
@@ -1520,6 +1574,10 @@ def test_write_megaprs_full_train_commands_uses_summary_predictors_for_reference
             str(manifest),
             "--genotype-prefix",
             "qc/all",
+            "--score-genotype-prefix",
+            "qc/test",
+            "--fit-score-genotype-prefix",
+            "qc/trainval",
             "--harmonized-dir",
             str(tmp_path / "harmonized"),
             "--train-keep",
@@ -1548,8 +1606,12 @@ def test_megaprs_slurm_defaults_to_target_profile_without_annotations():
     assert 'MEGAPRS_PROFILE="${MEGAPRS_PROFILE:-target}"' in text
     assert 'ANNOTATION_NUMBER="${ANNOTATION_NUMBER:-}"' in text
     assert 'ANNOTATION_PREFIX="${ANNOTATION_PREFIX:-}"' in text
+    assert 'SCORE_GENOTYPE_PREFIX="${SCORE_GENOTYPE_PREFIX:-$GENOTYPE_PREFIX}"' in text
+    assert 'FIT_SCORE_GENOTYPE_PREFIX="${FIT_SCORE_GENOTYPE_PREFIX:-$GENOTYPE_PREFIX}"' in text
     assert 'MEGAPRS_CHECK_MCMC="${MEGAPRS_CHECK_MCMC:-0}"' in text
     assert "--check-mcmc" in text
+    assert "--score-genotype-prefix" in text
+    assert "--fit-score-genotype-prefix" in text
 
 
 def test_write_sdpr_full_train_commands_generates_chr_tasks_and_scoring(tmp_path):
@@ -1586,6 +1648,10 @@ def test_write_sdpr_full_train_commands_generates_chr_tasks_and_scoring(tmp_path
             str(manifest),
             "--genotype-prefix",
             "qc/all",
+            "--score-genotype-prefix",
+            "qc/test",
+            "--fit-score-genotype-prefix",
+            "qc/trainval",
             "--harmonized-dir",
             str(tmp_path / "harmonized"),
             "--train-keep",
@@ -1631,6 +1697,8 @@ def test_write_sdpr_full_train_commands_generates_chr_tasks_and_scoring(tmp_path
     )
     assert "scripts/build_sdpr_scorefile.py" in score_text
     assert "--score" in score_text
+    assert "--pfile qc/test" in score_text
+    assert "--pfile qc/trainval" in score_text
     manifest_out = pd.read_csv(out_dir / "cad" / "commands" / "cad.sdpr_full_train.tasks.csv")
     assert manifest_out[["disease", "model_scope", "model", "n_gwas"]].to_dict("records") == [
         {"disease": "cad", "model_scope": "full_train", "model": "sdpr", "n_gwas": 12345}
@@ -1741,6 +1809,11 @@ def test_write_ldpred2_cv_commands_generates_fold_aware_array_tasks(tmp_path):
     variant_extract.write_text("rs1\nrs2\n", encoding="utf-8")
     genetic_map_dir = tmp_path / "genetic_maps"
     ld_cache_dir = tmp_path / "ld_cache"
+    ld_ref_map = tmp_path / "map_hm3_plus.rds"
+    ld_ref_map.write_text("placeholder", encoding="utf-8")
+    ld_ref_dir = tmp_path / "corr_hm3_plus"
+    ld_ref_dir.mkdir()
+    (ld_ref_dir / "LD_with_blocks_chr22.rds").write_text("placeholder", encoding="utf-8")
 
     subprocess.run(
         [
@@ -1764,6 +1837,12 @@ def test_write_ldpred2_cv_commands_generates_fold_aware_array_tasks(tmp_path):
             "0.01",
             "--sparse-grid",
             "0,1",
+            "--ld-reference-mode",
+            "ukb_hm3_plus",
+            "--ld-ref-map",
+            str(ld_ref_map),
+            "--ld-ref-dir",
+            str(ld_ref_dir),
             "--match-by",
             "position",
             "--variant-extract",
@@ -1789,6 +1868,12 @@ def test_write_ldpred2_cv_commands_generates_fold_aware_array_tasks(tmp_path):
     assert "--h2-grid" in task_text
     assert "--p-grid" in task_text
     assert "--sparse-grid" in task_text
+    assert "--ld-reference-mode \\\n  ukb_hm3_plus" in task_text
+    assert "--ld-ref-map" in task_text
+    assert str(ld_ref_map) in task_text
+    assert "--ld-ref-dir" in task_text
+    assert str(ld_ref_dir) in task_text
+    assert "LD_with_blocks_chr22.rds" in task_text
     assert "--genetic-map-dir" in task_text
     assert str(genetic_map_dir) in task_text
     assert "--genetic-map-type" in task_text
@@ -1811,6 +1896,20 @@ def test_write_ldpred2_cv_commands_generates_fold_aware_array_tasks(tmp_path):
     assert manifest_out["variant_extract"].tolist() == [str(variant_extract), str(variant_extract)]
     assert manifest_out["default_n"].tolist() == [12345, 12345]
     assert manifest_out["ld_cache_dir"].tolist() == [str(ld_cache_dir / "cad"), str(ld_cache_dir / "cad")]
+    assert manifest_out[["ld_reference_mode", "ld_ref_map", "ld_ref_dir"]].to_dict(
+        "records"
+    ) == [
+        {
+            "ld_reference_mode": "ukb_hm3_plus",
+            "ld_ref_map": str(ld_ref_map),
+            "ld_ref_dir": str(ld_ref_dir),
+        },
+        {
+            "ld_reference_mode": "ukb_hm3_plus",
+            "ld_ref_map": str(ld_ref_map),
+            "ld_ref_dir": str(ld_ref_dir),
+        },
+    ]
 
 
 def test_write_ldpred2_full_train_commands_generates_full_training_task(tmp_path):
@@ -1975,6 +2074,16 @@ def test_ldpred2_auto_slurm_defaults_to_ukbb_reference():
     assert "DEFAULT_AUTO_H2_INIT=0.2" in text
     assert "DEFAULT_AUTO_P_INIT=0.003,0.01,0.03" in text
     assert 'export AUTO_USE_MLE="${AUTO_USE_MLE:-0}"' in text
+
+
+def test_ldpred2_cv_slurm_defaults_to_ukbb_reference():
+    text = Path("slurm/ldpred2_cv.sbatch").read_text(encoding="utf-8")
+
+    assert 'LD_REFERENCE_MODE="${LD_REFERENCE_MODE:-ukb_hm3_plus}"' in text
+    assert 'LD_REF_MAP="${LD_REF_MAP:-data/resources/ldpred2/map_hm3_plus.rds}"' in text
+    assert 'LD_REF_DIR="${LD_REF_DIR:-data/resources/ldpred2/corr_hm3_plus}"' in text
+    assert 'MATCH_BY="${MATCH_BY:-position}"' in text
+    assert "--ld-reference-mode \"$LD_REFERENCE_MODE\"" in text
 
 
 def test_write_ldpred2_full_train_commands_supports_ukbb_reference(tmp_path):
@@ -2760,6 +2869,49 @@ def test_run_official_validation_fits_training_and_bootstraps_validation(tmp_pat
     assert set(summary["n_repeats"]) == {4}
     assert {"clump_r2", "p_threshold"} <= set(summary.columns)
 
+    point_only_out_dir = tmp_path / "official_validation_point_only"
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_official_validation.py",
+            "--model-name",
+            "point_only",
+            "--train-phenotype",
+            str(train),
+            "--labelled-phenotype",
+            str(labelled),
+            "--validation-covariates",
+            str(validation_covariates),
+            "--patient-col",
+            "sampleid",
+            "--labels",
+            "cad",
+            "--covariates",
+            "age",
+            "--train-prs-long-scores",
+            str(train_prs_scores),
+            "--prs-long-scores",
+            str(validation_prs_scores),
+            "--prs-param-cols",
+            "clump_r2,p_threshold",
+            "--point-only",
+            "--out-dir",
+            str(point_only_out_dir),
+        ],
+        check=True,
+    )
+
+    point_metrics = pd.read_csv(point_only_out_dir / "point_metrics.csv")
+    point_summary = pd.read_csv(point_only_out_dir / "summary_metrics.csv")
+    assert set(point_summary["n_repeats"]) == {0}
+    assert set(point_summary["method"]) == {"covariate_only", "prs_covariate_cad"}
+    merged = point_summary.merge(
+        point_metrics,
+        on=["model_name", "disease", "method", "clump_r2", "p_threshold"],
+        how="inner",
+    )
+    assert np.allclose(merged["auc_mean"], merged["auc"])
+
 
 def test_validate_official_model_wraps_fixed_validation_config(tmp_path):
     train = tmp_path / "train.tsv"
@@ -2854,3 +3006,77 @@ def test_validate_official_model_wraps_fixed_validation_config(tmp_path):
     assert set(summary["method"]) == {"covariate_only", "prs_covariate_cad"}
     assert set(summary["n_repeats"]) == {3}
     assert {"clump_r2", "p_threshold"} <= set(summary.columns)
+
+
+def test_evaluate_prs_cv_grid_writes_raw_scores_for_tabpfn_inputs(tmp_path):
+    phenotype = tmp_path / "phenotype.csv"
+    splits = tmp_path / "splits.csv"
+    manifest = tmp_path / "manifest.csv"
+    eligibility = tmp_path / "eligibility.yaml"
+    scores_dir = tmp_path / "fold_scores"
+    out_dir = tmp_path / "lassosum2" / "cad" / "evaluation"
+    scores_dir.mkdir()
+
+    phenotype_rows = []
+    split_rows = []
+    for fold in [0, 1]:
+        for i in range(12):
+            patient = f"S{fold}{i:02d}"
+            label = i % 2
+            phenotype_rows.append({"sampleid": patient, "cad": label})
+            split_rows.append({"sampleid": patient, "disease": "cad", "fold": fold})
+
+    manifest_rows = []
+    for fold in [0, 1]:
+        score_rows = []
+        score_path = scores_dir / f"fold{fold}.csv"
+        manifest_rows.append({"disease": "cad", "fold": fold, "score_file": str(score_path)})
+        for row in phenotype_rows:
+            patient = row["sampleid"]
+            label = int(row["cad"])
+            score_rows.extend(
+                [
+                    {"sampleid": patient, "delta": 0.01, "lambda": 1, "prs": float(label)},
+                    {"sampleid": patient, "delta": 0.1, "lambda": 2, "prs": float(label + 0.5)},
+                ]
+            )
+        pd.DataFrame(score_rows).to_csv(score_path, index=False)
+
+    pd.DataFrame(phenotype_rows).to_csv(phenotype, index=False)
+    pd.DataFrame(split_rows).to_csv(splits, index=False)
+    pd.DataFrame(manifest_rows).to_csv(manifest, index=False)
+    eligibility.write_text("disease_eligibility: {}\n", encoding="utf-8")
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/evaluate_prs_cv_grid.py",
+            "--disease",
+            "cad",
+            "--method-name",
+            "lassosum2",
+            "--score-manifest",
+            str(manifest),
+            "--score-kind",
+            "long",
+            "--param-cols",
+            "delta,lambda",
+            "--phenotype",
+            str(phenotype),
+            "--splits",
+            str(splits),
+            "--covariates",
+            "",
+            "--eligibility-config",
+            str(eligibility),
+            "--out-dir",
+            str(out_dir),
+        ],
+        check=True,
+    )
+
+    raw_scores = pd.read_csv(tmp_path / "lassosum2" / "cad" / "scores" / "cad.lassosum2_cv_scores_long.csv")
+    summary = pd.read_csv(out_dir / "summary_metrics.csv")
+    assert set(raw_scores.columns) == {"sampleid", "disease", "fold", "delta", "lambda", "prs", "source_score_file"}
+    assert len(raw_scores) == 96
+    assert {"delta", "lambda"} <= set(summary.columns)

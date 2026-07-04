@@ -7,8 +7,8 @@
 #SBATCH --partition=cpu_medium
 #SBATCH --array=1-5%1
 #SBATCH --job-name=ldpred2_cv_cad
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/ldpred2_cv/cad/ldpred2_cv_cad-%A_%a.log
+#SBATCH --output=logs/ldpred2_cv/cad/ldpred2_cv_cad-%A_%a.log
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DISEASE="cad"
 source "$REPO_DIR/slurm/ldpred2_cv.sbatch"

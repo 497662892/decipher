@@ -107,12 +107,16 @@ def _task_script(
     rscript: str,
     lassosum2_script: Path,
     genotype_prefix: Path,
+    score_genotype_prefix: Path,
+    fit_score_genotype_prefix: Path,
     harmonized: Path,
     train_keep: Path,
     score_keep: Path,
     fit_score_keep: Path,
     all_keep: Path,
     bed_prefix: Path,
+    score_bed_prefix: Path,
+    fit_score_bed_prefix: Path,
     variant_extract: Path | None,
     score_file: Path,
     fit_score_file: Path,
@@ -137,25 +141,35 @@ def _task_script(
     ld_ref_dir: Path,
     ld_ref_pattern: str,
 ) -> str:
-    plink_tokens = [
-        q(plink2),
-        "--pfile",
-        q(genotype_prefix),
-        "--keep",
-        q(all_keep),
-    ]
-    if chromosomes:
-        plink_tokens.extend(["--chr", q(chromosomes)])
-    if variant_extract is not None:
-        plink_tokens.extend(["--extract", q(variant_extract)])
-    plink_tokens.extend(
-        [
-            "--make-bed",
-            "--threads",
-            f'"${{SLURM_CPUS_PER_TASK:-{threads}}}"',
-            "--out",
-            q(bed_prefix),
+    def plink_make_bed_tokens(pfile_prefix: Path, keep_path: Path, out_prefix: Path) -> list[str]:
+        tokens = [
+            q(plink2),
+            "--pfile",
+            q(pfile_prefix),
+            "--keep",
+            q(keep_path),
         ]
+        if chromosomes:
+            tokens.extend(["--chr", q(chromosomes)])
+        if variant_extract is not None:
+            tokens.extend(["--extract", q(variant_extract)])
+        tokens.extend(
+            [
+                "--make-bed",
+                "--threads",
+                f'"${{SLURM_CPUS_PER_TASK:-{threads}}}"',
+                "--out",
+                q(out_prefix),
+            ]
+        )
+        return tokens
+
+    train_plink_tokens = plink_make_bed_tokens(genotype_prefix, train_keep, bed_prefix)
+    score_plink_tokens = plink_make_bed_tokens(score_genotype_prefix, score_keep, score_bed_prefix)
+    fit_score_plink_tokens = plink_make_bed_tokens(
+        fit_score_genotype_prefix,
+        fit_score_keep,
+        fit_score_bed_prefix,
     )
 
     r_tokens = [
@@ -169,6 +183,10 @@ def _task_script(
         "full_train",
         "--bed-prefix",
         q(bed_prefix),
+        "--score-bed-prefix",
+        q(score_bed_prefix),
+        "--fit-score-bed-prefix",
+        q(fit_score_bed_prefix),
         "--harmonized",
         q(harmonized),
         "--train-keep",
@@ -221,6 +239,64 @@ def _task_script(
     if default_n is not None:
         r_tokens.extend(["--default-n", f"{default_n:g}"])
 
+    bed_setup_lines = [
+        f"if [[ ! -s {q(str(bed_prefix) + '.bed')} || \"${{REUSE_LASSOSUM2_BED:-1}}\" != \"1\" ]]; then",
+        f"  {_render_command(train_plink_tokens)}",
+        "else",
+        f"  echo 'Reusing existing PLINK bed files: {bed_prefix}'",
+        "fi",
+    ]
+    if score_bed_prefix != bed_prefix:
+        bed_setup_lines.extend(
+            [
+                "",
+                f"if [[ ! -s {q(str(score_bed_prefix) + '.bed')} || \"${{REUSE_LASSOSUM2_BED:-1}}\" != \"1\" ]]; then",
+                f"  {_render_command(score_plink_tokens)}",
+                "else",
+                f"  echo 'Reusing existing scoring PLINK bed files: {score_bed_prefix}'",
+                "fi",
+            ]
+        )
+    if fit_score_bed_prefix not in {bed_prefix, score_bed_prefix}:
+        bed_setup_lines.extend(
+            [
+                "",
+                f"if [[ ! -s {q(str(fit_score_bed_prefix) + '.bed')} || \"${{REUSE_LASSOSUM2_BED:-1}}\" != \"1\" ]]; then",
+                f"  {_render_command(fit_score_plink_tokens)}",
+                "else",
+                f"  echo 'Reusing existing model-fit scoring PLINK bed files: {fit_score_bed_prefix}'",
+                "fi",
+            ]
+        )
+
+    bed_check_lines = []
+    for label, prefix in [
+        ("training", bed_prefix),
+        ("scoring", score_bed_prefix),
+        ("model-fit scoring", fit_score_bed_prefix),
+    ]:
+        bed_check_lines.extend(
+            [
+                f"test -s {q(str(prefix) + '.bed')} || {{ echo 'Missing {label} {prefix}.bed' >&2; exit 1; }}",
+                f"test -s {q(str(prefix) + '.bim')} || {{ echo 'Missing {label} {prefix}.bim' >&2; exit 1; }}",
+                f"test -s {q(str(prefix) + '.fam')} || {{ echo 'Missing {label} {prefix}.fam' >&2; exit 1; }}",
+            ]
+        )
+
+    pfile_check_lines = []
+    for label, prefix in [
+        ("training", genotype_prefix),
+        ("scoring", score_genotype_prefix),
+        ("model-fit scoring", fit_score_genotype_prefix),
+    ]:
+        pfile_check_lines.extend(
+            [
+                f"test -f {q(str(prefix) + '.pgen')} || {{ echo 'Missing {label} {prefix}.pgen' >&2; exit 1; }}",
+                f"test -f {q(str(prefix) + '.pvar')} || {{ echo 'Missing {label} {prefix}.pvar' >&2; exit 1; }}",
+                f"test -f {q(str(prefix) + '.psam')} || {{ echo 'Missing {label} {prefix}.psam' >&2; exit 1; }}",
+            ]
+        )
+
     return "\n".join(
         [
             "#!/usr/bin/env bash",
@@ -231,9 +307,7 @@ def _task_script(
                 f"mkdir -p {q(bed_prefix.parent)} {q(score_file.parent)} {q(summary_file.parent)} "
                 f"{q(model_file.parent)} {q(ld_backing_prefix.parent)} {q(tmp_dir)}"
             ),
-            f"test -f {q(str(genotype_prefix) + '.pgen')} || {{ echo 'Missing {genotype_prefix}.pgen' >&2; exit 1; }}",
-            f"test -f {q(str(genotype_prefix) + '.pvar')} || {{ echo 'Missing {genotype_prefix}.pvar' >&2; exit 1; }}",
-            f"test -f {q(str(genotype_prefix) + '.psam')} || {{ echo 'Missing {genotype_prefix}.psam' >&2; exit 1; }}",
+            *pfile_check_lines,
             f"test -s {q(harmonized)} || {{ echo 'Missing harmonized sumstats: {harmonized}' >&2; exit 1; }}",
             f"test -s {q(train_keep)} || {{ echo 'Missing full training keep file: {train_keep}' >&2; exit 1; }}",
             f"test -s {q(score_keep)} || {{ echo 'Missing scoring keep file: {score_keep}' >&2; exit 1; }}",
@@ -261,15 +335,9 @@ def _task_script(
             "  exit 0",
             "fi",
             "",
-            f"if [[ ! -s {q(str(bed_prefix) + '.bed')} || \"${{REUSE_LASSOSUM2_BED:-1}}\" != \"1\" ]]; then",
-            f"  {_render_command(plink_tokens)}",
-            "else",
-            f"  echo 'Reusing existing PLINK bed files: {bed_prefix}'",
-            "fi",
+            *bed_setup_lines,
             "",
-            f"test -s {q(str(bed_prefix) + '.bed')} || {{ echo 'Missing {bed_prefix}.bed' >&2; exit 1; }}",
-            f"test -s {q(str(bed_prefix) + '.bim')} || {{ echo 'Missing {bed_prefix}.bim' >&2; exit 1; }}",
-            f"test -s {q(str(bed_prefix) + '.fam')} || {{ echo 'Missing {bed_prefix}.fam' >&2; exit 1; }}",
+            *bed_check_lines,
             "",
             _render_command(r_tokens),
             f"echo 'Finished full-train lassosum2 task disease={disease} at '$(date)",
@@ -284,6 +352,8 @@ def main() -> None:
     parser.add_argument("--manifest", default="configs/official_sumstats.yaml")
     parser.add_argument("--patient-col", default="sampleid")
     parser.add_argument("--genotype-prefix", default="outputs/genotype_qc/qc_final/all_chromosomes.qc")
+    parser.add_argument("--score-genotype-prefix", default=None)
+    parser.add_argument("--fit-score-genotype-prefix", default=None)
     parser.add_argument("--harmonized-dir", default="data/processed/sumstats/harmonized")
     parser.add_argument("--train-keep", default="data/processed/sample_sets/labeled_train.keep.psam")
     parser.add_argument("--score-keep", default="data/processed/sample_sets/unlabelled_validation.keep.psam")
@@ -342,11 +412,28 @@ def main() -> None:
     train_keep = Path(args.train_keep)
     score_keep = Path(args.score_keep)
     fit_score_keep = Path(args.fit_score_keep) if args.fit_score_keep else train_keep
+    genotype_prefix = Path(args.genotype_prefix)
+    score_genotype_prefix = (
+        Path(args.score_genotype_prefix) if args.score_genotype_prefix else genotype_prefix
+    )
+    fit_score_genotype_prefix = (
+        Path(args.fit_score_genotype_prefix) if args.fit_score_genotype_prefix else genotype_prefix
+    )
     all_keep = keep_dir / f"{args.disease}.full_train.all.keep.psam"
     _write_union_keep([train_keep, score_keep, fit_score_keep], all_keep)
 
     tag = "full_train"
     bed_prefix = bed_dir / f"{args.disease}.{tag}.score_samples"
+    score_bed_prefix = (
+        bed_prefix
+        if score_genotype_prefix == genotype_prefix and score_keep == train_keep
+        else bed_dir / f"{args.disease}.{tag}.holdout_score_samples"
+    )
+    fit_score_bed_prefix = (
+        bed_prefix
+        if fit_score_genotype_prefix == genotype_prefix and fit_score_keep == train_keep
+        else bed_dir / f"{args.disease}.{tag}.fit_score_samples"
+    )
     score_file = score_dir / f"{args.disease}.{tag}.lassosum2_scores_long.csv"
     fit_score_file = score_dir / f"{args.disease}.{tag}.lassosum2_training_scores_long.csv"
     summary_file = report_dir / f"{args.disease}.{tag}.lassosum2_summary.csv"
@@ -359,13 +446,17 @@ def main() -> None:
             plink2=args.plink2,
             rscript=args.rscript,
             lassosum2_script=Path(args.lassosum2_script),
-            genotype_prefix=Path(args.genotype_prefix),
+            genotype_prefix=genotype_prefix,
+            score_genotype_prefix=score_genotype_prefix,
+            fit_score_genotype_prefix=fit_score_genotype_prefix,
             harmonized=harmonized,
             train_keep=train_keep,
             score_keep=score_keep,
             fit_score_keep=fit_score_keep,
             all_keep=all_keep,
             bed_prefix=bed_prefix,
+            score_bed_prefix=score_bed_prefix,
+            fit_score_bed_prefix=fit_score_bed_prefix,
             variant_extract=Path(args.variant_extract) if args.variant_extract else None,
             score_file=score_file,
             fit_score_file=fit_score_file,
@@ -412,7 +503,12 @@ def main() -> None:
             "score_keep": str(score_keep),
             "fit_score_keep": str(fit_score_keep),
             "all_keep": str(all_keep),
+            "genotype_prefix": str(genotype_prefix),
+            "score_genotype_prefix": str(score_genotype_prefix),
+            "fit_score_genotype_prefix": str(fit_score_genotype_prefix),
             "bed_prefix": str(bed_prefix),
+            "score_bed_prefix": str(score_bed_prefix),
+            "fit_score_bed_prefix": str(fit_score_bed_prefix),
             "variant_extract": args.variant_extract or "",
             "harmonized": str(harmonized),
             "score_file": str(score_file),

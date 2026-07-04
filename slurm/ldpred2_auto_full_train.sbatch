@@ -7,9 +7,9 @@
 #SBATCH --partition=cpu_medium
 #SBATCH --array=1-1%1
 #SBATCH --job-name=ldpred2_auto_full
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/ldpred2_auto_full_train/%x-%A_%a.log
+#SBATCH --output=logs/ldpred2_auto_full_train/%x-%A_%a.log
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export LDPRED2_MODE="${LDPRED2_MODE:-auto}"
 export OUT_DIR="${OUT_DIR:-outputs/ldpred2_auto_full_train}"
 export LD_CACHE_DIR="${LD_CACHE_DIR:-outputs/ldpred2_auto_ukbb_ld_cache}"

@@ -84,6 +84,10 @@ def test_iter_bootstrap_indices_resamples_with_replacement():
         assert indices.max() < 5
 
 
+def test_iter_bootstrap_indices_allows_zero_resamples():
+    assert list(iter_bootstrap_indices(n=5, n_resamples=0, seed=7)) == []
+
+
 def test_summarize_repeated_metrics_flattens_repeat_statistics():
     metrics = pd.DataFrame(
         {

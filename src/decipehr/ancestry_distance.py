@@ -26,10 +26,12 @@ GROUP_COLORS = {
 
 
 def load_sscore(path: str | Path) -> pd.DataFrame:
-    """Read PLINK2 .sscore output and normalize #FID to FID."""
+    """Read PLINK2 .sscore output and normalize leading-# ID columns."""
     frame = read_table(path, sep=r"\s+", engine="python")
     if "#FID" in frame.columns and "FID" not in frame.columns:
         frame = frame.rename(columns={"#FID": "FID"})
+    if "#IID" in frame.columns and "IID" not in frame.columns:
+        frame = frame.rename(columns={"#IID": "IID"})
     require_columns(frame, ["IID"], f"sscore {path}")
     return frame
 

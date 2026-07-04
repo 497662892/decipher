@@ -6,8 +6,8 @@
 #SBATCH --time=48:00:00
 #SBATCH --partition=cpu_medium
 #SBATCH --job-name=sdpr_prep_cad
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/sdpr_prepare/cad-%J.log
+#SBATCH --output=logs/sdpr_prepare/cad-%J.log
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export DISEASE=cad
 source "$REPO_DIR/slurm/sdpr_prepare_reference.sbatch"

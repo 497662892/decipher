@@ -74,9 +74,14 @@ def _task_script(
             f"test -s {q(train_keep)} || {{ echo 'Missing training keep file: {train_keep}' >&2; exit 1; }}",
             f"test -s {q(all_keep)} || {{ echo 'Missing scoring keep file: {all_keep}' >&2; exit 1; }}",
             "",
+            "PLINK_MEMORY_ARGS=()",
+            "if [[ -n \"${PLINK_MEMORY_MB:-}\" ]]; then",
+            "  PLINK_MEMORY_ARGS=(--memory \"$PLINK_MEMORY_MB\")",
+            "fi",
+            "",
             f"if [[ ! -s {q(str(clump_prefix) + '.clumps')} || \"${{REUSE_CLUMPS:-0}}\" != \"1\" ]]; then",
             (
-                f"  {q(plink2)} --pfile {q(genotype_prefix)} --keep {q(train_keep)} "
+                f"  {q(plink2)} \"${{PLINK_MEMORY_ARGS[@]}}\" --pfile {q(genotype_prefix)} --keep {q(train_keep)} "
                 f"--clump {q(harmonized)} --clump-id-field SNP --clump-p-field P "
                 f"--clump-p1 1 --clump-p2 1 --clump-r2 {r2_threshold:g} "
                 f"--clump-kb {window_kb} --threads \"${{SLURM_CPUS_PER_TASK:-{threads}}}\" "
@@ -95,7 +100,7 @@ def _task_script(
                 f"--summary {q(score_summary)}"
             ),
             (
-                f"{q(plink2)} --pfile {q(genotype_prefix)} --keep {q(all_keep)} "
+                f"{q(plink2)} \"${{PLINK_MEMORY_ARGS[@]}}\" --pfile {q(genotype_prefix)} --keep {q(all_keep)} "
                 f"--score {q(score_file)} 1 2 header-read cols=+scoresums "
                 f"--score-col-nums {score_cols} "
                 f"--threads \"${{SLURM_CPUS_PER_TASK:-{threads}}}\" --out {q(score_prefix)}"

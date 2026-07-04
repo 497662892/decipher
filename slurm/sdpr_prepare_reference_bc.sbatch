@@ -6,8 +6,8 @@
 #SBATCH --time=48:00:00
 #SBATCH --partition=cpu_medium
 #SBATCH --job-name=sdpr_prep_bc
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/sdpr_prepare/bc-%J.log
+#SBATCH --output=logs/sdpr_prepare/bc-%J.log
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export DISEASE=bc
 source "$REPO_DIR/slurm/sdpr_prepare_reference.sbatch"

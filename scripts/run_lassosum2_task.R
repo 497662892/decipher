@@ -483,6 +483,8 @@ disease <- arg_value(args, "disease", required = TRUE)
 fold <- as.integer(arg_value(args, "fold", "0"))
 model_scope <- arg_value(args, "model-scope", "full_train")
 bed_prefix <- arg_value(args, "bed-prefix", required = TRUE)
+score_bed_prefix <- arg_value(args, "score-bed-prefix", bed_prefix)
+fit_score_bed_prefix <- arg_value(args, "fit-score-bed-prefix", bed_prefix)
 harmonized <- arg_value(args, "harmonized", required = TRUE)
 train_keep <- arg_value(args, "train-keep", required = TRUE)
 score_keep <- arg_value(args, "score-keep", required = TRUE)
@@ -546,24 +548,48 @@ for (path in out_dirs) {
   dir.create(path, recursive = TRUE, showWarnings = FALSE)
 }
 
-bed_file <- paste0(bed_prefix, ".bed")
-if (!file.exists(bed_file)) {
-  stop("Missing PLINK bed file: ", bed_file, call. = FALSE)
+attach_bigsnp <- function(prefix, context) {
+  bed_file <- paste0(prefix, ".bed")
+  if (!file.exists(bed_file)) {
+    stop("Missing PLINK bed file for ", context, ": ", bed_file, call. = FALSE)
+  }
+  rds_file <- paste0(prefix, ".rds")
+  if (!file.exists(rds_file)) {
+    message("Creating bigSNP backing files from ", bed_file)
+    rds_file <- bigsnpr::snp_readBed(bed_file, backingfile = prefix)
+  }
+  bigsnpr::snp_attach(rds_file)
 }
-rds_file <- paste0(bed_prefix, ".rds")
-if (!file.exists(rds_file)) {
-  message("Creating bigSNP backing files from ", bed_file)
-  rds_file <- bigsnpr::snp_readBed(bed_file, backingfile = bed_prefix)
-}
-obj <- bigsnpr::snp_attach(rds_file)
+
+obj <- attach_bigsnp(bed_prefix, "training")
 G <- obj$genotypes
 sample_ids <- fam_sample_ids(obj$fam)
 map <- map_for_lassosum2(obj$map)
 
+score_obj <- obj
+if (!identical(normalizePath(score_bed_prefix, mustWork = FALSE), normalizePath(bed_prefix, mustWork = FALSE))) {
+  score_obj <- attach_bigsnp(score_bed_prefix, "scoring")
+}
+G_score <- score_obj$genotypes
+score_sample_ids_all <- fam_sample_ids(score_obj$fam)
+score_map <- map_for_lassosum2(score_obj$map)
+
+fit_score_obj <- obj
+if (!identical(normalizePath(fit_score_bed_prefix, mustWork = FALSE), normalizePath(bed_prefix, mustWork = FALSE))) {
+  if (identical(normalizePath(fit_score_bed_prefix, mustWork = FALSE), normalizePath(score_bed_prefix, mustWork = FALSE))) {
+    fit_score_obj <- score_obj
+  } else {
+    fit_score_obj <- attach_bigsnp(fit_score_bed_prefix, "model-fit scoring")
+  }
+}
+G_fit_score <- fit_score_obj$genotypes
+fit_score_sample_ids_all <- fam_sample_ids(fit_score_obj$fam)
+fit_score_map <- map_for_lassosum2(fit_score_obj$map)
+
 train_ids <- read_keep(train_keep)
 score_ids <- read_keep(score_keep)
 ind_train <- match(train_ids, sample_ids)
-ind_score <- match(score_ids, sample_ids)
+ind_score <- match(score_ids, score_sample_ids_all)
 if (anyNA(ind_train)) {
   stop("Training keep samples absent from PLINK bed: ", paste(head(train_ids[is.na(ind_train)]), collapse = ", "), call. = FALSE)
 }
@@ -574,7 +600,7 @@ fit_score_ids <- NULL
 ind_fit_score <- NULL
 if (!is.null(fit_score_keep)) {
   fit_score_ids <- read_keep(fit_score_keep)
-  ind_fit_score <- match(fit_score_ids, sample_ids)
+  ind_fit_score <- match(fit_score_ids, fit_score_sample_ids_all)
   if (anyNA(ind_fit_score)) {
     stop("Model-fit scoring keep samples absent from PLINK bed: ", paste(head(fit_score_ids[is.na(ind_fit_score)]), collapse = ", "), call. = FALSE)
   }
@@ -660,14 +686,24 @@ if (attr(score_impute_values, "n_without_observed") > 0L) {
   )
 }
 
-write_scores <- function(ind_row, ids, out_path) {
-  score_beta_grid <- beta_grid * matched$target_beta_sign
+score_match_for_map <- function(target_map, context) {
+  target_match <- match_reference_to_target(matched, target_map)
+  if (nrow(target_match) == 0L) {
+    stop("No matched variants could be mapped to ", context, " genotype variants for scoring.", call. = FALSE)
+  }
+  target_match[order(target_match$ref_row), ]
+}
+
+write_scores <- function(G_target, target_map, ind_row, ids, out_path, context) {
+  target_match <- score_match_for_map(target_map, context)
+  ref_rows <- target_match$ref_row
+  score_beta_grid <- beta_grid[ref_rows, , drop = FALSE] * target_match$target_beta_sign
   score_matrix <- score_with_training_mean_imputation(
-    G,
+    G_target,
     score_beta_grid,
     ind_row = ind_row,
-    ind_col = num_id,
-    impute_values = score_impute_values,
+    ind_col = target_match$target_num_id,
+    impute_values = score_impute_values[ref_rows],
     block_size = score_block_size
   )
   if (is.null(dim(score_matrix))) {
@@ -691,13 +727,25 @@ write_scores <- function(ind_row, ids, out_path) {
     score_frames[[j]] <- frame
   }
   data.table::fwrite(do.call(rbind, score_frames), out_path)
-  attr(score_matrix, "n_missing")
+  n_missing <- attr(score_matrix, "n_missing")
+  attr(n_missing, "n_matched") <- nrow(target_match)
+  n_missing
 }
 
-n_missing_scored_genotypes <- write_scores(ind_score, score_ids, score_out)
+n_missing_scored_genotypes <- write_scores(G_score, score_map, ind_score, score_ids, score_out, "scoring")
+n_score_matched <- attr(n_missing_scored_genotypes, "n_matched")
 n_missing_fit_scored_genotypes <- NA_real_
+n_fit_score_matched <- NA_integer_
 if (!is.null(fit_score_out)) {
-  n_missing_fit_scored_genotypes <- write_scores(ind_fit_score, fit_score_ids, fit_score_out)
+  n_missing_fit_scored_genotypes <- write_scores(
+    G_fit_score,
+    fit_score_map,
+    ind_fit_score,
+    fit_score_ids,
+    fit_score_out,
+    "model-fit scoring"
+  )
+  n_fit_score_matched <- attr(n_missing_fit_scored_genotypes, "n_matched")
 }
 
 summary <- data.frame(
@@ -707,6 +755,8 @@ summary <- data.frame(
   ld_reference_mode = ld_reference_mode,
   n_sumstats = nrow(sumstats),
   n_matched = nrow(matched),
+  n_score_matched = n_score_matched,
+  n_fit_score_matched = n_fit_score_matched,
   n_train = length(ind_train),
   n_scored = length(ind_score),
   n_fit_scored = if (!is.null(ind_fit_score)) length(ind_fit_score) else NA_integer_,

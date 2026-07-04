@@ -2,20 +2,20 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=48GB
+#SBATCH --mem=96GB
 #SBATCH --time=12:00:00
-#SBATCH --partition=cpu_short
-#SBATCH --array=1-20%2
+#SBATCH --partition=gl40s_short
+#SBATCH --array=1-20%4
 #SBATCH --job-name=pt_cv_T2D
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/pt_cv/T2D/pt_cv_T2D-%A_%a.log
+#SBATCH --output=logs/pt_cv/T2D/pt_cv_T2D-%A_%a.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DISEASE="T2D"
 
-if [[ -f /gpfs/home/jm10850/.bashrc ]]; then
-  source /gpfs/home/jm10850/.bashrc
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
+  source "$HOME/.bashrc"
 fi
 
 set -u
@@ -25,8 +25,8 @@ cd "$REPO_DIR"
 if command -v module >/dev/null 2>&1; then
   module load plink/2.0-20260228 || true
 fi
-if ! command -v plink2 >/dev/null 2>&1 && [[ -x /gpfs/share/apps/plink/2.0-20260228/plink2 ]]; then
-  export PATH="/gpfs/share/apps/plink/2.0-20260228:$PATH"
+if ! command -v plink2 >/dev/null 2>&1 && [[ -n "${PLINK2_DIR:-}" && -x "$PLINK2_DIR/plink2" ]]; then
+  export PATH="$PLINK2_DIR:$PATH"
 fi
 
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
@@ -35,6 +35,7 @@ export OPENBLAS_NUM_THREADS="$OMP_NUM_THREADS"
 export PYTHONUNBUFFERED=1
 export PYTHONPATH="$REPO_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-outputs/uv-cache}"
+export PLINK_MEMORY_MB="${PLINK_MEMORY_MB:-90000}"
 
 MANIFEST="${MANIFEST:-configs/official_sumstats.yaml}"
 SPLITS="${SPLITS:-data/processed/splits/disease_specific_split_seed42.csv}"
@@ -61,6 +62,9 @@ mkdir -p "$UV_CACHE_DIR" "$OUT_DIR/$DISEASE/commands" "logs/pt_cv/$DISEASE"
       regenerate_tasks=1
     elif ! grep -q -- "--score-col-nums" "$FIRST_TASK_SCRIPT"; then
       echo "Regenerating stale P+T task scripts missing --score-col-nums"
+      regenerate_tasks=1
+    elif ! grep -q -- "PLINK_MEMORY_ARGS" "$FIRST_TASK_SCRIPT"; then
+      echo "Regenerating stale P+T task scripts missing PLINK memory controls"
       regenerate_tasks=1
     fi
   fi

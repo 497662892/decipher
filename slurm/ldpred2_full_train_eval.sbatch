@@ -6,15 +6,15 @@
 #SBATCH --time=04:00:00
 #SBATCH --partition=cpu_short
 #SBATCH --job-name=ldpred2_full_eval
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/official_validation_ldpred2/ldpred2_full_eval-%J.log
+#SBATCH --output=logs/official_validation_ldpred2/ldpred2_full_eval-%J.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DISEASE="${DISEASE:-}"
 
-if [[ -f /gpfs/home/jm10850/.bashrc ]]; then
-  source /gpfs/home/jm10850/.bashrc
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
+  source "$HOME/.bashrc"
 fi
 
 set -u

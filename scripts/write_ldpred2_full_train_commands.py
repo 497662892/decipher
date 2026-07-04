@@ -123,12 +123,14 @@ def _task_script(
     rscript: str,
     ldpred2_script: Path,
     genotype_prefix: Path,
+    score_genotype_prefix: Path,
     harmonized: Path,
     train_keep: Path,
     score_keep: Path,
     fit_score_keep: Path,
     all_keep: Path,
     bed_prefix: Path,
+    score_bed_prefix: Path,
     variant_extract: Path | None,
     score_file: Path,
     fit_score_file: Path,
@@ -166,6 +168,7 @@ def _task_script(
     ld_ref_dir: Path | None,
     ld_ref_pattern: str,
 ) -> str:
+    use_score_bed = score_genotype_prefix != genotype_prefix
     plink_tokens = [
         q(plink2),
         "--pfile",
@@ -184,6 +187,26 @@ def _task_script(
             f'"${{SLURM_CPUS_PER_TASK:-{threads}}}"',
             "--out",
             q(bed_prefix),
+        ]
+    )
+    score_plink_tokens = [
+        q(plink2),
+        "--pfile",
+        q(score_genotype_prefix),
+        "--keep",
+        q(score_keep),
+    ]
+    if chromosomes:
+        score_plink_tokens.extend(["--chr", q(chromosomes)])
+    if variant_extract is not None:
+        score_plink_tokens.extend(["--extract", q(variant_extract)])
+    score_plink_tokens.extend(
+        [
+            "--make-bed",
+            "--threads",
+            f'"${{SLURM_CPUS_PER_TASK:-{threads}}}"',
+            "--out",
+            q(score_bed_prefix),
         ]
     )
 
@@ -263,6 +286,8 @@ def _task_script(
         "--reuse-ld-corr",
         '"${REUSE_LDPRED2_LD:-1}"',
     ]
+    if use_score_bed:
+        r_tokens.extend(["--score-bed-prefix", q(score_bed_prefix)])
     if genetic_map_dir is not None:
         r_tokens.extend(["--genetic-map-dir", q(genetic_map_dir)])
     if allow_mb_fallback:
@@ -289,6 +314,15 @@ def _task_script(
             f"test -f {q(str(genotype_prefix) + '.pgen')} || {{ echo 'Missing {genotype_prefix}.pgen' >&2; exit 1; }}",
             f"test -f {q(str(genotype_prefix) + '.pvar')} || {{ echo 'Missing {genotype_prefix}.pvar' >&2; exit 1; }}",
             f"test -f {q(str(genotype_prefix) + '.psam')} || {{ echo 'Missing {genotype_prefix}.psam' >&2; exit 1; }}",
+            *(
+                [
+                    f"test -f {q(str(score_genotype_prefix) + '.pgen')} || {{ echo 'Missing {score_genotype_prefix}.pgen' >&2; exit 1; }}",
+                    f"test -f {q(str(score_genotype_prefix) + '.pvar')} || {{ echo 'Missing {score_genotype_prefix}.pvar' >&2; exit 1; }}",
+                    f"test -f {q(str(score_genotype_prefix) + '.psam')} || {{ echo 'Missing {score_genotype_prefix}.psam' >&2; exit 1; }}",
+                ]
+                if use_score_bed
+                else []
+            ),
             f"test -s {q(harmonized)} || {{ echo 'Missing harmonized sumstats: {harmonized}' >&2; exit 1; }}",
             f"test -s {q(train_keep)} || {{ echo 'Missing full training keep file: {train_keep}' >&2; exit 1; }}",
             f"test -s {q(score_keep)} || {{ echo 'Missing scoring keep file: {score_keep}' >&2; exit 1; }}",
@@ -331,6 +365,22 @@ def _task_script(
             f"test -s {q(str(bed_prefix) + '.bed')} || {{ echo 'Missing {bed_prefix}.bed' >&2; exit 1; }}",
             f"test -s {q(str(bed_prefix) + '.bim')} || {{ echo 'Missing {bed_prefix}.bim' >&2; exit 1; }}",
             f"test -s {q(str(bed_prefix) + '.fam')} || {{ echo 'Missing {bed_prefix}.fam' >&2; exit 1; }}",
+            *(
+                [
+                    "",
+                    f"if [[ ! -s {q(str(score_bed_prefix) + '.bed')} || \"${{REUSE_LDPRED2_BED:-1}}\" != \"1\" ]]; then",
+                    f"  {_render_command(score_plink_tokens)}",
+                    "else",
+                    f"  echo 'Reusing existing PLINK score bed files: {score_bed_prefix}'",
+                    "fi",
+                    "",
+                    f"test -s {q(str(score_bed_prefix) + '.bed')} || {{ echo 'Missing {score_bed_prefix}.bed' >&2; exit 1; }}",
+                    f"test -s {q(str(score_bed_prefix) + '.bim')} || {{ echo 'Missing {score_bed_prefix}.bim' >&2; exit 1; }}",
+                    f"test -s {q(str(score_bed_prefix) + '.fam')} || {{ echo 'Missing {score_bed_prefix}.fam' >&2; exit 1; }}",
+                ]
+                if use_score_bed
+                else []
+            ),
             "",
             _render_command(r_tokens),
             f"echo 'Finished full-train LDpred2 task disease={disease} at '$(date)",
@@ -345,6 +395,11 @@ def main() -> None:
     parser.add_argument("--manifest", default="configs/official_sumstats.yaml")
     parser.add_argument("--patient-col", default="sampleid")
     parser.add_argument("--genotype-prefix", default="outputs/genotype_qc/qc_final/all_chromosomes.qc")
+    parser.add_argument(
+        "--score-genotype-prefix",
+        default=None,
+        help="Optional separate genotype prefix for scoring samples. Defaults to --genotype-prefix.",
+    )
     parser.add_argument("--harmonized-dir", default="data/processed/sumstats/harmonized")
     parser.add_argument("--train-keep", default="data/processed/sample_sets/labeled_train.keep.psam")
     parser.add_argument("--score-keep", default="data/processed/sample_sets/unlabelled_validation.keep.psam")
@@ -426,12 +481,16 @@ def main() -> None:
         path.mkdir(parents=True, exist_ok=True)
 
     genotype_prefix = Path(args.genotype_prefix)
+    score_genotype_prefix = Path(args.score_genotype_prefix) if args.score_genotype_prefix else genotype_prefix
     ldpred2_script = Path(args.ldpred2_script)
     train_keep = Path(args.train_keep)
     score_keep = Path(args.score_keep)
     fit_score_keep = Path(args.fit_score_keep) if args.fit_score_keep else train_keep
     all_keep = keep_dir / f"{args.disease}.full_train.all.keep.psam"
-    _write_union_keep([train_keep, score_keep, fit_score_keep], all_keep)
+    if score_genotype_prefix == genotype_prefix:
+        _write_union_keep([train_keep, score_keep, fit_score_keep], all_keep)
+    else:
+        _write_union_keep([train_keep, fit_score_keep], all_keep)
     variant_extract = Path(args.variant_extract) if args.variant_extract else None
     genetic_map_dir = Path(args.genetic_map_dir) if args.genetic_map_dir else None
     ld_ref_map = Path(args.ld_ref_map) if args.ld_ref_map else None
@@ -439,6 +498,11 @@ def main() -> None:
 
     tag = "full_train"
     bed_prefix = bed_dir / f"{args.disease}.{tag}.score_samples"
+    score_bed_prefix = (
+        bed_dir / f"{args.disease}.{tag}.holdout_score_samples"
+        if score_genotype_prefix != genotype_prefix
+        else bed_prefix
+    )
     score_file = score_dir / f"{args.disease}.{tag}.ldpred2_scores_long.csv"
     fit_score_file = score_dir / f"{args.disease}.{tag}.ldpred2_training_scores_long.csv"
     summary_file = report_dir / f"{args.disease}.{tag}.ldpred2_summary.csv"
@@ -452,12 +516,14 @@ def main() -> None:
             rscript=args.rscript,
             ldpred2_script=ldpred2_script,
             genotype_prefix=genotype_prefix,
+            score_genotype_prefix=score_genotype_prefix,
             harmonized=harmonized,
             train_keep=train_keep,
             score_keep=score_keep,
             fit_score_keep=fit_score_keep,
             all_keep=all_keep,
             bed_prefix=bed_prefix,
+            score_bed_prefix=score_bed_prefix,
             variant_extract=variant_extract,
             score_file=score_file,
             fit_score_file=fit_score_file,
@@ -525,6 +591,8 @@ def main() -> None:
             "fit_score_keep": str(fit_score_keep),
             "all_keep": str(all_keep),
             "bed_prefix": str(bed_prefix),
+            "score_genotype_prefix": str(score_genotype_prefix),
+            "score_bed_prefix": str(score_bed_prefix),
             "variant_extract": str(variant_extract) if variant_extract is not None else "",
             "harmonized": str(harmonized),
             "score_file": str(score_file),

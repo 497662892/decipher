@@ -436,6 +436,335 @@ def test_build_ensemble_inputs_selects_best_single_model_per_family(tmp_path):
     assert selected.set_index("family").loc["ldpred2", "sparse"] == 1
 
 
+def test_build_prs_cv_ensemble_inputs_selects_best_oof_models(tmp_path):
+    pt_cv_root = tmp_path / "pt_cv"
+    ldpred2_cv_root = tmp_path / "ldpred2_cv"
+    out_dir = tmp_path / "tabpfn_cv_inputs"
+
+    for root in [pt_cv_root, ldpred2_cv_root]:
+        (root / "cad" / "evaluation").mkdir(parents=True)
+        (root / "cad" / "scores").mkdir(parents=True)
+
+    pd.DataFrame(
+        [
+            {"disease": "cad", "method": "pt_prs_covariate", "auc": 0.55, "clump_r2": 0.1, "p_threshold": 1.0},
+            {"disease": "cad", "method": "pt_prs_covariate", "auc": 0.70, "clump_r2": 0.2, "p_threshold": 0.01},
+        ]
+    ).to_csv(pt_cv_root / "cad" / "evaluation" / "summary_metrics.csv", index=False)
+    pd.DataFrame(
+        [
+            {
+                "disease": "cad",
+                "method": "ldpred2_prs_covariate",
+                "auc": 0.60,
+                "h2": 0.05,
+                "p": 0.01,
+                "sparse": 0,
+            },
+            {
+                "disease": "cad",
+                "method": "ldpred2_prs_covariate",
+                "auc": 0.80,
+                "h2": 0.1,
+                "p": 0.1,
+                "sparse": 1,
+            },
+        ]
+    ).to_csv(ldpred2_cv_root / "cad" / "evaluation" / "summary_metrics.csv", index=False)
+
+    pt_rows = []
+    ldpred2_rows = []
+    for fold, sample in enumerate(["S1", "S2"], start=1):
+        pt_rows.extend(
+            [
+                {"sampleid": sample, "disease": "cad", "fold": fold, "clump_r2": 0.1, "p_threshold": 1.0, "prs": 1.0},
+                {
+                    "sampleid": sample,
+                    "disease": "cad",
+                    "fold": fold,
+                    "clump_r2": 0.2,
+                    "p_threshold": 0.01,
+                    "prs": 2.0,
+                },
+            ]
+        )
+        ldpred2_rows.extend(
+            [
+                {
+                    "sampleid": sample,
+                    "disease": "cad",
+                    "fold": fold,
+                    "h2": 0.05,
+                    "p": 0.01,
+                    "sparse": 0,
+                    "model": "low",
+                    "prs": 3.0,
+                },
+                {
+                    "sampleid": sample,
+                    "disease": "cad",
+                    "fold": fold,
+                    "h2": 0.1,
+                    "p": 0.1,
+                    "sparse": 1,
+                    "model": "high",
+                    "prs": 4.0,
+                },
+            ]
+        )
+    pd.DataFrame(pt_rows).to_csv(pt_cv_root / "cad" / "scores" / "cad.pt_cv_scores_long.csv", index=False)
+    pd.DataFrame(ldpred2_rows).to_csv(
+        ldpred2_cv_root / "cad" / "scores" / "cad.ldpred2_cv_scores_long.csv",
+        index=False,
+    )
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_prs_cv_ensemble_inputs.py",
+            "--disease",
+            "cad",
+            "--families",
+            "pt,ldpred2",
+            "--pt-cv-root",
+            str(pt_cv_root),
+            "--ldpred2-cv-root",
+            str(ldpred2_cv_root),
+            "--out-dir",
+            str(out_dir),
+        ],
+        check=True,
+    )
+
+    train_long = pd.read_csv(out_dir / "cad.train_long.csv")
+    selected = pd.read_csv(out_dir / "cad.selected_single_models.csv")
+
+    assert set(train_long["model"]) == {"pt", "ldpred2"}
+    assert set(train_long.loc[train_long["model"] == "pt", "prs"]) == {2.0}
+    assert set(train_long.loc[train_long["model"] == "ldpred2", "prs"]) == {4.0}
+    assert set(train_long["fold"]) == {1, 2}
+    assert selected.set_index("family").loc["pt", "p_threshold"] == 0.01
+    assert selected.set_index("family").loc["ldpred2", "sparse"] == 1
+
+
+def test_build_prs_cv_ensemble_inputs_filters_fold_model_scores_to_oof(tmp_path):
+    pt_cv_root = tmp_path / "pt_cv"
+    out_dir = tmp_path / "tabpfn_cv_inputs"
+    splits = tmp_path / "splits.csv"
+    (pt_cv_root / "cad" / "evaluation").mkdir(parents=True)
+    (pt_cv_root / "cad" / "scores").mkdir(parents=True)
+
+    pd.DataFrame(
+        [
+            {"disease": "cad", "method": "pt_prs_covariate", "auc": 0.70, "clump_r2": 0.2, "p_threshold": 0.01},
+        ]
+    ).to_csv(pt_cv_root / "cad" / "evaluation" / "summary_metrics.csv", index=False)
+    pd.DataFrame(
+        [
+            {"sampleid": "S1", "disease": "cad", "fold": 0},
+            {"sampleid": "S2", "disease": "cad", "fold": 1},
+        ]
+    ).to_csv(splits, index=False)
+    pd.DataFrame(
+        [
+            {"sampleid": "S1", "disease": "cad", "fold": 0, "clump_r2": 0.2, "p_threshold": 0.01, "prs": 10.0},
+            {"sampleid": "S1", "disease": "cad", "fold": 1, "clump_r2": 0.2, "p_threshold": 0.01, "prs": 99.0},
+            {"sampleid": "S2", "disease": "cad", "fold": 0, "clump_r2": 0.2, "p_threshold": 0.01, "prs": 88.0},
+            {"sampleid": "S2", "disease": "cad", "fold": 1, "clump_r2": 0.2, "p_threshold": 0.01, "prs": 20.0},
+        ]
+    ).to_csv(pt_cv_root / "cad" / "scores" / "cad.pt_cv_scores_long.csv", index=False)
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_prs_cv_ensemble_inputs.py",
+            "--disease",
+            "cad",
+            "--families",
+            "pt",
+            "--pt-cv-root",
+            str(pt_cv_root),
+            "--splits",
+            str(splits),
+            "--out-dir",
+            str(out_dir),
+        ],
+        check=True,
+    )
+
+    train_long = pd.read_csv(out_dir / "cad.train_long.csv")
+    assert train_long.sort_values("sampleid")["prs"].tolist() == [10.0, 20.0]
+
+
+def test_build_final_ensemble_inputs_uses_cv_selection(tmp_path):
+    pt_root = tmp_path / "pt_final"
+    ldpred2_root = tmp_path / "ldpred2_final"
+    out_dir = tmp_path / "tabpfn_final_inputs"
+    selection_file = tmp_path / "selected_single_models.csv"
+
+    pd.DataFrame(
+        [
+            {
+                "disease": "cad",
+                "family": "pt",
+                "selection_metric": "auc",
+                "selection_metric_value": 0.7,
+                "clump_r2": 0.2,
+                "p_threshold": 0.01,
+            },
+            {
+                "disease": "cad",
+                "family": "ldpred2",
+                "selection_metric": "auc",
+                "selection_metric_value": 0.8,
+                "h2": 0.1,
+                "p": 0.1,
+                "sparse": 1,
+            },
+        ]
+    ).to_csv(selection_file, index=False)
+
+    for root in [pt_root, ldpred2_root]:
+        (root / "cad" / "scores").mkdir(parents=True)
+
+    pt_train = []
+    pt_test = []
+    for sample in ["T1", "T2"]:
+        pt_train.extend(
+            [
+                {"sampleid": sample, "disease": "cad", "clump_r2": 0.1, "p_threshold": 1.0, "prs": 1.0},
+                {"sampleid": sample, "disease": "cad", "clump_r2": 0.2, "p_threshold": 0.01, "prs": 2.0},
+            ]
+        )
+    for sample in ["H1", "H2"]:
+        pt_test.extend(
+            [
+                {"sampleid": sample, "disease": "cad", "clump_r2": 0.1, "p_threshold": 1.0, "prs": 10.0},
+                {"sampleid": sample, "disease": "cad", "clump_r2": 0.2, "p_threshold": 0.01, "prs": 20.0},
+            ]
+        )
+    pd.DataFrame(pt_train).to_csv(
+        pt_root / "cad" / "scores" / "cad.pt_full_train_trainval_scores_long.csv",
+        index=False,
+    )
+    pd.DataFrame(pt_test).to_csv(
+        pt_root / "cad" / "scores" / "cad.pt_full_train_holdout_test_scores_long.csv",
+        index=False,
+    )
+
+    ldpred2_train = []
+    ldpred2_test = []
+    for sample in ["T1", "T2"]:
+        ldpred2_train.extend(
+            [
+                {"sampleid": sample, "disease": "cad", "h2": 0.05, "p": 0.01, "sparse": 0, "prs": 3.0},
+                {"sampleid": sample, "disease": "cad", "h2": 0.1, "p": 0.1, "sparse": 1, "prs": 4.0},
+            ]
+        )
+    for sample in ["H1", "H2"]:
+        ldpred2_test.extend(
+            [
+                {"sampleid": sample, "disease": "cad", "h2": 0.05, "p": 0.01, "sparse": 0, "prs": 30.0},
+                {"sampleid": sample, "disease": "cad", "h2": 0.1, "p": 0.1, "sparse": 1, "prs": 40.0},
+            ]
+        )
+    pd.DataFrame(ldpred2_train).to_csv(
+        ldpred2_root / "cad" / "scores" / "cad.ldpred2_full_train_trainval_scores_long.csv",
+        index=False,
+    )
+    pd.DataFrame(ldpred2_test).to_csv(
+        ldpred2_root / "cad" / "scores" / "cad.ldpred2_full_train_holdout_test_scores_long.csv",
+        index=False,
+    )
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_final_ensemble_inputs_from_cv_selection.py",
+            "--disease",
+            "cad",
+            "--families",
+            "pt,ldpred2",
+            "--selection-file",
+            str(selection_file),
+            "--pt-score-root",
+            str(pt_root),
+            "--ldpred2-score-root",
+            str(ldpred2_root),
+            "--out-dir",
+            str(out_dir),
+        ],
+        check=True,
+    )
+
+    train_long = pd.read_csv(out_dir / "cad.train_long.csv")
+    test_long = pd.read_csv(out_dir / "cad.test_long.csv")
+
+    assert set(train_long["model"]) == {"pt", "ldpred2"}
+    assert set(test_long["model"]) == {"pt", "ldpred2"}
+    assert set(train_long.loc[train_long["model"] == "pt", "prs"]) == {2.0}
+    assert set(test_long.loc[test_long["model"] == "ldpred2", "prs"]) == {40.0}
+
+
+def test_predict_final_holdout_model_accepts_wide_tabpfn_scores(tmp_path):
+    train = tmp_path / "train.csv"
+    test = tmp_path / "test.csv"
+    train_prs = tmp_path / "train_prs.csv"
+    test_prs = tmp_path / "test_prs.csv"
+    out_dir = tmp_path / "predictions"
+
+    pd.DataFrame(
+        {
+            "sampleid": [f"T{i}" for i in range(8)],
+            "cad": [0, 1, 0, 1, 0, 1, 0, 1],
+            "age": [40, 50, 45, 55, 42, 58, 44, 60],
+        }
+    ).to_csv(train, index=False)
+    pd.DataFrame({"sampleid": ["H1", "H2"], "age": [47, 59]}).to_csv(test, index=False)
+    pd.DataFrame(
+        {
+            "sampleid": [f"T{i}" for i in range(8)],
+            "prs_cad": [-1.0, 1.0, -0.8, 1.2, -0.7, 0.9, -1.1, 1.1],
+        }
+    ).to_csv(train_prs, index=False)
+    pd.DataFrame({"sampleid": ["H1", "H2"], "prs_cad": [-0.2, 0.8]}).to_csv(test_prs, index=False)
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/predict_final_holdout_model.py",
+            "--model-name",
+            "tabpfn_ensemble_prs_only",
+            "--train-phenotype",
+            str(train),
+            "--test-covariates",
+            str(test),
+            "--patient-col",
+            "sampleid",
+            "--labels",
+            "cad",
+            "--covariates",
+            "age",
+            "--train-prs-scores",
+            str(train_prs),
+            "--test-prs-scores",
+            str(test_prs),
+            "--out-dir",
+            str(out_dir),
+            "--submission-out",
+            str(out_dir / "submission.csv"),
+        ],
+        check=True,
+    )
+
+    predictions = pd.read_csv(out_dir / "predictions.csv")
+    submission = pd.read_csv(out_dir / "submission.csv")
+    assert len(predictions) == 2
+    assert set(predictions["method"]) == {"prs_covariate_cad"}
+    assert set(submission.columns) == {"sampleid", "cad"}
+    assert submission["cad"].between(0, 1).all()
+
+
 def test_write_and_collect_ensemble_grid_commands(tmp_path):
     input_dir = tmp_path / "ensemble_inputs"
     grid_root = tmp_path / "ensemble_grid"

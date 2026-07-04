@@ -6,15 +6,15 @@
 #SBATCH --time=08:00:00
 #SBATCH --partition=cpu_short
 #SBATCH --job-name=sumstats_common_bc
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/sumstats_common/bc/sumstats_common_bc-%J.log
+#SBATCH --output=logs/sumstats_common/bc/sumstats_common_bc-%J.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DISEASE="bc"
 
-if [[ -f /gpfs/home/jm10850/.bashrc ]]; then
-  source /gpfs/home/jm10850/.bashrc
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
+  source "$HOME/.bashrc"
 fi
 
 set -u
@@ -28,9 +28,10 @@ export PYTHONPATH="$REPO_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-outputs/uv-cache}"
 
 MANIFEST="${MANIFEST:-configs/official_sumstats.yaml}"
-SUMSTATS_ROOT="${SUMSTATS_ROOT:-/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/supplementary_files/summary_statistics}"
+SUMSTATS_ROOT="${SUMSTATS_ROOT:-data/raw/training_phase/supplementary_files/summary_statistics}"
 TARGET_PVAR="${TARGET_PVAR:-outputs/genotype_qc/qc_final/all_chromosomes.qc.pvar}"
 OUT_DIR="${OUT_DIR:-data/processed/sumstats}"
+STANDARDIZED_SOURCE_DIR="${STANDARDIZED_SOURCE_DIR:-}"
 CHUNKSIZE="${CHUNKSIZE:-250000}"
 TARGET_PVAR_CHUNKSIZE="${TARGET_PVAR_CHUNKSIZE:-1000000}"
 REUSE_STANDARDIZED="${REUSE_STANDARDIZED:-0}"
@@ -43,6 +44,7 @@ echo "Manifest: $MANIFEST"
 echo "Summary statistics root: $SUMSTATS_ROOT"
 echo "Target pvar: $TARGET_PVAR"
 echo "Output dir: $OUT_DIR"
+echo "Standardized source dir: ${STANDARDIZED_SOURCE_DIR:-<none>}"
 
 args=(
   uv run --extra dev python scripts/prepare_sumstats_common.py
@@ -56,6 +58,9 @@ args=(
 )
 if [[ "$REUSE_STANDARDIZED" == "1" ]]; then
   args+=(--reuse-standardized)
+fi
+if [[ -n "$STANDARDIZED_SOURCE_DIR" ]]; then
+  args+=(--standardized-source-dir "$STANDARDIZED_SOURCE_DIR")
 fi
 "${args[@]}"
 

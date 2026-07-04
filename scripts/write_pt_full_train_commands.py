@@ -42,6 +42,8 @@ def _task_script(
     p_thresholds: list[float],
     plink2: str,
     genotype_prefix: Path,
+    score_genotype_prefix: Path,
+    fit_score_genotype_prefix: Path,
     harmonized: Path,
     train_keep: Path,
     score_keep: Path,
@@ -63,9 +65,17 @@ def _task_script(
             "",
             f"echo 'Started full-train P+T task disease={disease} r2={r2_threshold:g} at '$(date)",
             f"mkdir -p {q(clump_prefix.parent)} {q(score_file.parent)} {q(score_prefix.parent)}",
+            'PLINK_MEMORY_ARGS=()',
+            'if [[ -n "${PLINK_MEMORY_MB:-}" ]]; then PLINK_MEMORY_ARGS=(--memory "$PLINK_MEMORY_MB"); fi',
             f"test -f {q(str(genotype_prefix) + '.pgen')} || {{ echo 'Missing {genotype_prefix}.pgen' >&2; exit 1; }}",
             f"test -f {q(str(genotype_prefix) + '.pvar')} || {{ echo 'Missing {genotype_prefix}.pvar' >&2; exit 1; }}",
             f"test -f {q(str(genotype_prefix) + '.psam')} || {{ echo 'Missing {genotype_prefix}.psam' >&2; exit 1; }}",
+            f"test -f {q(str(score_genotype_prefix) + '.pgen')} || {{ echo 'Missing {score_genotype_prefix}.pgen' >&2; exit 1; }}",
+            f"test -f {q(str(score_genotype_prefix) + '.pvar')} || {{ echo 'Missing {score_genotype_prefix}.pvar' >&2; exit 1; }}",
+            f"test -f {q(str(score_genotype_prefix) + '.psam')} || {{ echo 'Missing {score_genotype_prefix}.psam' >&2; exit 1; }}",
+            f"test -f {q(str(fit_score_genotype_prefix) + '.pgen')} || {{ echo 'Missing {fit_score_genotype_prefix}.pgen' >&2; exit 1; }}",
+            f"test -f {q(str(fit_score_genotype_prefix) + '.pvar')} || {{ echo 'Missing {fit_score_genotype_prefix}.pvar' >&2; exit 1; }}",
+            f"test -f {q(str(fit_score_genotype_prefix) + '.psam')} || {{ echo 'Missing {fit_score_genotype_prefix}.psam' >&2; exit 1; }}",
             f"test -s {q(harmonized)} || {{ echo 'Missing harmonized sumstats: {harmonized}' >&2; exit 1; }}",
             f"test -s {q(train_keep)} || {{ echo 'Missing full training keep file: {train_keep}' >&2; exit 1; }}",
             f"test -s {q(score_keep)} || {{ echo 'Missing scoring keep file: {score_keep}' >&2; exit 1; }}",
@@ -83,6 +93,7 @@ def _task_script(
                 f"--clump {q(harmonized)} --clump-id-field SNP --clump-p-field P "
                 f"--clump-p1 1 --clump-p2 1 --clump-r2 {r2_threshold:g} "
                 f"--clump-kb {window_kb} --threads \"${{SLURM_CPUS_PER_TASK:-{threads}}}\" "
+                '"${PLINK_MEMORY_ARGS[@]}" '
                 f"--out {q(clump_prefix)}"
             ),
             "else",
@@ -98,18 +109,22 @@ def _task_script(
                 f"--summary {q(score_summary)}"
             ),
             (
-                f"{q(plink2)} --pfile {q(genotype_prefix)} --keep {q(score_keep)} "
+                f"{q(plink2)} --pfile {q(score_genotype_prefix)} --keep {q(score_keep)} "
                 f"--score {q(score_file)} 1 2 header-read cols=+scoresums "
                 f"--score-col-nums {score_cols} "
-                f"--threads \"${{SLURM_CPUS_PER_TASK:-{threads}}}\" --out {q(score_prefix)}"
+                f"--threads \"${{SLURM_CPUS_PER_TASK:-{threads}}}\" "
+                '"${PLINK_MEMORY_ARGS[@]}" '
+                f"--out {q(score_prefix)}"
             ),
             *(
                 [
                     (
-                        f"{q(plink2)} --pfile {q(genotype_prefix)} --keep {q(fit_score_keep)} "
+                        f"{q(plink2)} --pfile {q(fit_score_genotype_prefix)} --keep {q(fit_score_keep)} "
                         f"--score {q(score_file)} 1 2 header-read cols=+scoresums "
                         f"--score-col-nums {score_cols} "
-                        f"--threads \"${{SLURM_CPUS_PER_TASK:-{threads}}}\" --out {q(fit_score_prefix)}"
+                        f"--threads \"${{SLURM_CPUS_PER_TASK:-{threads}}}\" "
+                        '"${PLINK_MEMORY_ARGS[@]}" '
+                        f"--out {q(fit_score_prefix)}"
                     )
                 ]
                 if fit_score_keep is not None and fit_score_prefix is not None
@@ -129,6 +144,16 @@ def main() -> None:
     parser.add_argument("--manifest", default="configs/official_sumstats.yaml")
     parser.add_argument("--patient-col", default="sampleid")
     parser.add_argument("--genotype-prefix", default="outputs/genotype_qc/qc_final/all_chromosomes.qc")
+    parser.add_argument(
+        "--score-genotype-prefix",
+        default=None,
+        help="PGEN prefix used for final scoring. Defaults to --genotype-prefix.",
+    )
+    parser.add_argument(
+        "--fit-score-genotype-prefix",
+        default=None,
+        help="PGEN prefix used for fitting/calibrating the validation model. Defaults to --genotype-prefix.",
+    )
     parser.add_argument("--harmonized-dir", default="data/processed/sumstats/harmonized")
     parser.add_argument("--train-keep", default="data/processed/sample_sets/labeled_train.keep.psam")
     parser.add_argument("--score-keep", default="data/processed/sample_sets/unlabelled_validation.keep.psam")
@@ -168,6 +193,12 @@ def main() -> None:
     task_scripts: list[Path] = []
     manifest_rows = []
     genotype_prefix = Path(args.genotype_prefix)
+    score_genotype_prefix = (
+        Path(args.score_genotype_prefix) if args.score_genotype_prefix else genotype_prefix
+    )
+    fit_score_genotype_prefix = (
+        Path(args.fit_score_genotype_prefix) if args.fit_score_genotype_prefix else genotype_prefix
+    )
     train_keep = Path(args.train_keep)
     score_keep = Path(args.score_keep)
     fit_score_keep = Path(args.fit_score_keep) if args.fit_score_keep else train_keep
@@ -187,6 +218,8 @@ def main() -> None:
                 p_thresholds=p_thresholds,
                 plink2=args.plink2,
                 genotype_prefix=genotype_prefix,
+                score_genotype_prefix=score_genotype_prefix,
+                fit_score_genotype_prefix=fit_score_genotype_prefix,
                 harmonized=harmonized,
                 train_keep=train_keep,
                 score_keep=score_keep,
@@ -211,6 +244,9 @@ def main() -> None:
                 "r2_tag": tag,
                 "p_thresholds": ",".join(f"{threshold:g}" for threshold in p_thresholds),
                 "task_script": str(task_script),
+                "genotype_prefix": str(genotype_prefix),
+                "score_genotype_prefix": str(score_genotype_prefix),
+                "fit_score_genotype_prefix": str(fit_score_genotype_prefix),
                 "train_keep": str(train_keep),
                 "score_keep": str(score_keep),
                 "fit_score_keep": str(fit_score_keep),

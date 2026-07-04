@@ -6,16 +6,16 @@
 #SBATCH --time=04:00:00
 #SBATCH --partition=cpu_short
 #SBATCH --job-name=decipehr_preprocess
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/preprocess/preprocess-%J.log
+#SBATCH --output=logs/preprocess/preprocess-%J.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
-if [[ -f /gpfs/home/jm10850/.bashrc ]]; then
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
   # BigPurple's /etc/bashrc is not nounset-safe; source the user environment
   # before enabling `set -u`.
-  source /gpfs/home/jm10850/.bashrc
+  source "$HOME/.bashrc"
 fi
 
 set -u
@@ -38,8 +38,8 @@ export MKL_NUM_THREADS="$OMP_NUM_THREADS"
 export OPENBLAS_NUM_THREADS="$OMP_NUM_THREADS"
 export PYTHONPATH="$REPO_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
 
-PHENOTYPE="${PHENOTYPE:-/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Training_Cov_file.txt}"
-VALIDATION_COVARIATES="${VALIDATION_COVARIATES:-/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/Testing_Cov_file.txt}"
+PHENOTYPE="${PHENOTYPE:-data/raw/training_phase/phenotype_files/Training_Cov_file.txt}"
+VALIDATION_COVARIATES="${VALIDATION_COVARIATES:-data/raw/training_phase/phenotype_files/Testing_Cov_file.txt}"
 PATIENT_COL="${PATIENT_COL:-sampleid}"
 LABELS="${LABELS:-cad,bc,T2D}"
 COVARIATES="${COVARIATES:-sex,age_sd,PC1_sd,PC2_sd,PC3_sd,PC4_sd,PC5_sd,PC6_sd,PC7_sd,PC8_sd,PC9_sd,PC10_sd}"

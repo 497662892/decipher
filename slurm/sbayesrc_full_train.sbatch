@@ -6,15 +6,15 @@
 #SBATCH --time=72:00:00
 #SBATCH --partition=cpu_long
 #SBATCH --job-name=sbayesrc_full
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/sbayesrc_full_train/%x-%J.log
+#SBATCH --output=logs/sbayesrc_full_train/%x-%J.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DISEASE="${DISEASE:-}"
 
-if [[ -f /gpfs/home/jm10850/.bashrc ]]; then
-  source /gpfs/home/jm10850/.bashrc
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
+  source "$HOME/.bashrc"
 fi
 
 set -u
@@ -30,8 +30,8 @@ PLINK_MODULE="${PLINK_MODULE:-plink/2.0-20260228}"
 if command -v module >/dev/null 2>&1; then
   module load "$PLINK_MODULE" || true
 fi
-if ! command -v plink2 >/dev/null 2>&1 && [[ -x /gpfs/share/apps/plink/2.0-20260228/plink2 ]]; then
-  export PATH="/gpfs/share/apps/plink/2.0-20260228:$PATH"
+if ! command -v plink2 >/dev/null 2>&1 && [[ -n "${PLINK2_DIR:-}" && -x "$PLINK2_DIR/plink2" ]]; then
+  export PATH="$PLINK2_DIR:$PATH"
 fi
 
 GCTB_MODULE="${GCTB_MODULE:-}"
@@ -51,8 +51,10 @@ export REUSE_SBAYESRC_IMPUTED="${REUSE_SBAYESRC_IMPUTED:-1}"
 export REUSE_SBAYESRC_EFFECTS="${REUSE_SBAYESRC_EFFECTS:-1}"
 
 MANIFEST="${MANIFEST:-configs/official_sumstats.yaml}"
-SUMSTATS_ROOT="${SUMSTATS_ROOT:-/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/supplementary_files/summary_statistics}"
+SUMSTATS_ROOT="${SUMSTATS_ROOT:-data/raw/training_phase/supplementary_files/summary_statistics}"
 GENOTYPE_PREFIX="${GENOTYPE_PREFIX:-outputs/genotype_qc/qc_final/all_chromosomes.qc}"
+SCORE_GENOTYPE_PREFIX="${SCORE_GENOTYPE_PREFIX:-$GENOTYPE_PREFIX}"
+FIT_SCORE_GENOTYPE_PREFIX="${FIT_SCORE_GENOTYPE_PREFIX:-$GENOTYPE_PREFIX}"
 HARMONIZED_DIR="${HARMONIZED_DIR:-data/processed/sumstats/harmonized}"
 TRAIN_KEEP="${TRAIN_KEEP:-data/processed/sample_sets/labeled_train.keep.psam}"
 SCORE_KEEP="${SCORE_KEEP:-data/processed/sample_sets/unlabelled_validation.keep.psam}"
@@ -123,6 +125,8 @@ echo "Started sBayesRC full-train workflow for $DISEASE at $(date)"
   --manifest "$MANIFEST" \
   --sumstats-root "$SUMSTATS_ROOT" \
   --genotype-prefix "$GENOTYPE_PREFIX" \
+  --score-genotype-prefix "$SCORE_GENOTYPE_PREFIX" \
+  --fit-score-genotype-prefix "$FIT_SCORE_GENOTYPE_PREFIX" \
   --harmonized-dir "$HARMONIZED_DIR" \
   --train-keep "$TRAIN_KEEP" \
   --score-keep "$SCORE_KEEP" \

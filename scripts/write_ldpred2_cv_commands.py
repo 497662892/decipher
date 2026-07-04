@@ -123,6 +123,10 @@ def _task_script(
     default_n: float | None,
     join_by_pos: bool,
     save_beta_grid: bool,
+    ld_reference_mode: str,
+    ld_ref_map: Path | None,
+    ld_ref_dir: Path | None,
+    ld_ref_pattern: str,
 ) -> str:
     plink_tokens = [
         q(plink2),
@@ -162,6 +166,8 @@ def _task_script(
         q(all_keep),
         "--patient-col",
         q(patient_col),
+        "--ld-reference-mode",
+        q(ld_reference_mode),
         "--score-out",
         q(score_file),
         "--summary-out",
@@ -197,6 +203,12 @@ def _task_script(
         r_tokens.extend(["--allow-mb-fallback", "true"])
     if default_n is not None:
         r_tokens.extend(["--default-n", f"{default_n:g}"])
+    if ld_ref_map is not None:
+        r_tokens.extend(["--ld-ref-map", q(ld_ref_map)])
+    if ld_ref_dir is not None:
+        r_tokens.extend(["--ld-ref-dir", q(ld_ref_dir)])
+    if ld_ref_pattern:
+        r_tokens.extend(["--ld-ref-pattern", q(ld_ref_pattern)])
 
     return "\n".join(
         [
@@ -219,6 +231,18 @@ def _task_script(
                     f"test -s {q(variant_extract)} || {{ echo 'Missing variant extract file: {variant_extract}' >&2; exit 1; }}"
                 ]
                 if variant_extract is not None
+                else []
+            ),
+            *(
+                [
+                    f"test -s {q(ld_ref_map)} || {{ echo 'Missing LD reference map: {ld_ref_map}' >&2; exit 1; }}",
+                    f"test -d {q(ld_ref_dir)} || {{ echo 'Missing LD reference directory: {ld_ref_dir}' >&2; exit 1; }}",
+                    (
+                        f"test -s {q(ld_ref_dir / ld_ref_pattern.replace('{chr}', '22'))} || "
+                        f"{{ echo 'Missing LD reference chr22 matrix under {ld_ref_dir}' >&2; exit 1; }}"
+                    ),
+                ]
+                if ld_reference_mode != "target" and ld_ref_map is not None and ld_ref_dir is not None
                 else []
             ),
             "",
@@ -261,6 +285,14 @@ def main() -> None:
     parser.add_argument("--sparse-grid", default=_csv_bool(DEFAULT_SPARSE_GRID))
     parser.add_argument("--ld-window-cm", type=float, default=3.0)
     parser.add_argument("--ld-window-mb", type=float, default=3.0)
+    parser.add_argument(
+        "--ld-reference-mode",
+        choices=["target", "ukb_hm3_plus", "external"],
+        default="target",
+    )
+    parser.add_argument("--ld-ref-map", default=None)
+    parser.add_argument("--ld-ref-dir", default=None)
+    parser.add_argument("--ld-ref-pattern", default="LD_with_blocks_chr{chr}.rds")
     parser.add_argument("--variant-extract", default=None)
     parser.add_argument(
         "--ld-cache-dir",
@@ -300,6 +332,8 @@ def main() -> None:
             disease_splits[args.patient_col].duplicated(), args.patient_col
         ].head(5)
         raise ValueError(f"Split file has duplicate patients for {args.disease}: {duplicated.tolist()}")
+    if args.ld_reference_mode != "target" and (not args.ld_ref_map or not args.ld_ref_dir):
+        raise ValueError("--ld-ref-map and --ld-ref-dir are required when --ld-reference-mode is not 'target'.")
 
     out_dir = Path(args.out_dir) / args.disease
     keep_dir = out_dir / "keep"
@@ -323,6 +357,8 @@ def main() -> None:
     ldpred2_script = Path(args.ldpred2_script)
     variant_extract = Path(args.variant_extract) if args.variant_extract else None
     genetic_map_dir = Path(args.genetic_map_dir) if args.genetic_map_dir else None
+    ld_ref_map = Path(args.ld_ref_map) if args.ld_ref_map else None
+    ld_ref_dir = Path(args.ld_ref_dir) if args.ld_ref_dir else None
     for fold in sorted(disease_splits["fold"].dropna().astype(int).unique()):
         train_keep = keep_dir / f"{args.disease}.fold{fold}.train.keep.psam"
         val_keep = keep_dir / f"{args.disease}.fold{fold}.val.keep.psam"
@@ -368,6 +404,10 @@ def main() -> None:
                 default_n=default_n,
                 join_by_pos=args.match_by == "position",
                 save_beta_grid=args.save_beta_grid,
+                ld_reference_mode=args.ld_reference_mode,
+                ld_ref_map=ld_ref_map,
+                ld_ref_dir=ld_ref_dir,
+                ld_ref_pattern=args.ld_ref_pattern,
             ),
             encoding="utf-8",
         )
@@ -394,6 +434,10 @@ def main() -> None:
                 "model_file": str(model_file),
                 "ld_backing_prefix": str(ld_backing_prefix),
                 "ld_cache_dir": str(ld_dir),
+                "ld_reference_mode": args.ld_reference_mode,
+                "ld_ref_map": str(ld_ref_map) if ld_ref_map is not None else "",
+                "ld_ref_dir": str(ld_ref_dir) if ld_ref_dir is not None else "",
+                "ld_ref_pattern": args.ld_ref_pattern,
             }
         )
 

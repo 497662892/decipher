@@ -7,9 +7,9 @@
 #SBATCH --partition=cpu_short
 #SBATCH --array=1-22%22
 #SBATCH --job-name=sdpr_prebuilt_full
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/sdpr_full_train/%x-%A_%a.log
+#SBATCH --output=logs/sdpr_full_train/%x-%A_%a.log
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 PREBUILT_REF_DIR="${PREBUILT_REF_DIR:-data/resources/sdpr/ref_1kg_eur_mhc_included}"
 export REF_DIR="${REF_DIR:-$PREBUILT_REF_DIR}"
 source "$REPO_DIR/slurm/sdpr_full_train.sbatch"

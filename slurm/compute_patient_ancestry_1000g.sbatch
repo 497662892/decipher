@@ -6,11 +6,11 @@
 #SBATCH --time=24:00:00
 #SBATCH --partition=cpu_medium
 #SBATCH --job-name=patient_ancestry_1000g
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/ancestry_1000g/patient_ancestry-%J.log
+#SBATCH --output=logs/ancestry_1000g/patient_ancestry-%J.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$REPO_DIR"
 
 mkdir -p logs/ancestry_1000g outputs/ancestry_1000g outputs/uv-cache
@@ -21,11 +21,12 @@ if command -v module >/dev/null 2>&1; then
   module load plink/2.0-20260228 || module load plink/2.0 || true
 fi
 
-if ! command -v plink2 >/dev/null 2>&1 && [[ -x /gpfs/share/apps/plink/2.0-20260228/plink2 ]]; then
-  export PATH="/gpfs/share/apps/plink/2.0-20260228:$PATH"
+if ! command -v plink2 >/dev/null 2>&1 && [[ -n "${PLINK2_DIR:-}" && -x "$PLINK2_DIR/plink2" ]]; then
+  export PATH="$PLINK2_DIR:$PATH"
 fi
 
 PLINK2="${PLINK2:-plink2}"
+PYTHON="${PYTHON:-.venv/bin/python}"
 THREADS="${THREADS:-${SLURM_CPUS_PER_TASK:-16}}"
 
 TARGET_PREFIX="${TARGET_PREFIX:-outputs/genotype_qc/qc_final/all_chromosomes.qc}"
@@ -46,6 +47,7 @@ for suffix in pgen pvar psam; do
   test -s "${TARGET_PREFIX}.${suffix}" || { echo "Missing target ${TARGET_PREFIX}.${suffix}" >&2; exit 1; }
   test -s "${REF_PREFIX}.${suffix}" || { echo "Missing 1000G ${REF_PREFIX}.${suffix}" >&2; exit 1; }
 done
+test -x "$PYTHON" || { echo "Missing Python executable: $PYTHON" >&2; exit 1; }
 test -s "$PANEL" || { echo "Missing 1000G panel $PANEL" >&2; exit 1; }
 
 echo "Started patient ancestry projection at $(date)"
@@ -55,8 +57,9 @@ echo "1000G panel: $PANEL"
 echo "Output dir: $OUT_DIR"
 echo "Fit PCs: $N_PCS_FIT; distance PCs: $N_PCS_DISTANCE"
 echo "PLINK2: $PLINK2"
+echo "Python: $PYTHON"
 
-uv run --extra dev python -u scripts/make_ancestry_overlap.py \
+"$PYTHON" -u scripts/make_ancestry_overlap.py \
   --target-variants "${TARGET_PREFIX}.pvar" \
   --reference-variants "${REF_PREFIX}.pvar" \
   --out-dir "$HARM_DIR" \
@@ -140,7 +143,7 @@ score_end_col=$((5 + N_PCS_FIT))
   --threads "$THREADS" \
   --out "$PCA_DIR/target.projected"
 
-uv run --extra dev python -u scripts/compute_ancestry_distances.py \
+"$PYTHON" -u scripts/compute_ancestry_distances.py \
   --ref-sscore "$PCA_DIR/1000g.projected.sscore" \
   --target-sscore "$PCA_DIR/target.projected.sscore" \
   --panel "$PANEL" \

@@ -4,17 +4,17 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=8GB
 #SBATCH --time=02:00:00
-#SBATCH --partition=deciphehr
+#SBATCH --partition=gpu4_dev,gl40s_dev
 #SBATCH --job-name=megaprs_full
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/megaprs_full_train/%x-%J.log
+#SBATCH --output=logs/megaprs_full_train/%x-%J.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DISEASE="${DISEASE:-}"
 
-if [[ -f /gpfs/home/jm10850/.bashrc ]]; then
-  source /gpfs/home/jm10850/.bashrc
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
+  source "$HOME/.bashrc"
 fi
 
 set -u
@@ -30,8 +30,8 @@ PLINK_MODULE="${PLINK_MODULE:-plink/2.0-20260228}"
 if command -v module >/dev/null 2>&1; then
   module load "$PLINK_MODULE" || true
 fi
-if ! command -v plink2 >/dev/null 2>&1 && [[ -x /gpfs/share/apps/plink/2.0-20260228/plink2 ]]; then
-  export PATH="/gpfs/share/apps/plink/2.0-20260228:$PATH"
+if ! command -v plink2 >/dev/null 2>&1 && [[ -n "${PLINK2_DIR:-}" && -x "$PLINK2_DIR/plink2" ]]; then
+  export PATH="$PLINK2_DIR:$PATH"
 fi
 
 LDAK_MODULE="${LDAK_MODULE:-}"
@@ -54,6 +54,8 @@ export REUSE_MEGAPRS_EFFECTS="${REUSE_MEGAPRS_EFFECTS:-1}"
 
 MANIFEST="${MANIFEST:-configs/official_sumstats.yaml}"
 GENOTYPE_PREFIX="${GENOTYPE_PREFIX:-outputs/genotype_qc/qc_final/all_chromosomes.qc}"
+SCORE_GENOTYPE_PREFIX="${SCORE_GENOTYPE_PREFIX:-$GENOTYPE_PREFIX}"
+FIT_SCORE_GENOTYPE_PREFIX="${FIT_SCORE_GENOTYPE_PREFIX:-$GENOTYPE_PREFIX}"
 HARMONIZED_DIR="${HARMONIZED_DIR:-data/processed/sumstats/harmonized}"
 TRAIN_KEEP="${TRAIN_KEEP:-data/processed/sample_sets/labeled_train.keep.psam}"
 SCORE_KEEP="${SCORE_KEEP:-data/processed/sample_sets/unlabelled_validation.keep.psam}"
@@ -108,7 +110,7 @@ N_GWAS="${N_GWAS:-}"
 CHUNKSIZE="${CHUNKSIZE:-250000}"
 WORKFLOW_SCRIPT="${WORKFLOW_SCRIPT:-$OUT_DIR/$DISEASE/commands/$DISEASE.megaprs_full_train.commands.sh}"
 MEGAPRS_EXECUTION_MODE="${MEGAPRS_EXECUTION_MODE:-submit_array}"
-MEGAPRS_PARTITION="${MEGAPRS_PARTITION:-deciphehr}"
+MEGAPRS_PARTITION="${MEGAPRS_PARTITION:-gl40s_short}"
 MEGAPRS_PRE_CORS_CPUS="${MEGAPRS_PRE_CORS_CPUS:-16}"
 MEGAPRS_PRE_CORS_MEM="${MEGAPRS_PRE_CORS_MEM:-128GB}"
 MEGAPRS_PRE_CORS_TIME="${MEGAPRS_PRE_CORS_TIME:-24:00:00}"
@@ -208,6 +210,8 @@ echo "Started MegaPRS full-train workflow for $DISEASE at $(date)"
   --disease "$DISEASE" \
   --manifest "$MANIFEST" \
   --genotype-prefix "$GENOTYPE_PREFIX" \
+  --score-genotype-prefix "$SCORE_GENOTYPE_PREFIX" \
+  --fit-score-genotype-prefix "$FIT_SCORE_GENOTYPE_PREFIX" \
   --harmonized-dir "$HARMONIZED_DIR" \
   --train-keep "$TRAIN_KEEP" \
   --score-keep "$SCORE_KEEP" \

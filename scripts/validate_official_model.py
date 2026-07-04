@@ -13,7 +13,7 @@ from decipehr.schema import parse_csv_list
 DEFAULT_CONFIG = "configs/default.yaml"
 DEFAULT_ELIGIBILITY_CONFIG = "configs/disease_eligibility.yaml"
 DEFAULT_TRAIN_PHENOTYPE = (
-    "/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/"
+    "data/raw/training_phase/phenotype_files/"
     "Training_Cov_file.txt"
 )
 
@@ -106,7 +106,9 @@ def _build_command(args: argparse.Namespace) -> list[str]:
     labels = _labels(args, columns)
     covariates = args.covariates or _csv_from_config(columns.get("covariates"), "columns.covariates")
     patient_col = args.patient_col or _required_value(columns, "patient_id", "columns")
-    n_bootstraps = args.n_bootstraps or int(evaluation.get("n_bootstraps", 1000))
+    n_bootstraps = (
+        args.n_bootstraps if args.n_bootstraps is not None else int(evaluation.get("n_bootstraps", 1000))
+    )
     out_dir = args.out_dir or _default_out_dir(args.model_name)
     validation_phenotype_out = args.validation_phenotype_out or str(
         paths.get("official_validation_phenotype", "data/processed/official_validation_phenotype.csv")
@@ -194,6 +196,11 @@ def main() -> None:
     parser.add_argument("--validation-covariates", default=None)
     parser.add_argument("--eligibility-config", default=DEFAULT_ELIGIBILITY_CONFIG)
     parser.add_argument("--n-bootstraps", type=int, default=None)
+    parser.add_argument(
+        "--point-only",
+        action="store_true",
+        help="Skip bootstrap resampling and write summary metrics from point estimates.",
+    )
     parser.add_argument("--bootstrap-size", type=int, default=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--class-weight", choices=["none", "balanced"], default="none")
@@ -212,6 +219,9 @@ def main() -> None:
     parser.add_argument("--write-predictions", action="store_true")
     parser.add_argument("--dry-run", action="store_true", help="Print the resolved command without running it.")
     args = parser.parse_args()
+
+    if args.point_only:
+        args.n_bootstraps = 0
 
     cmd = _build_command(args)
     print("Resolved official validation command:")

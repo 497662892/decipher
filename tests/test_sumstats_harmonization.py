@@ -112,3 +112,61 @@ def test_harmonize_sumstats_common_cli_writes_table_and_summary(tmp_path):
     assert harmonized["SNP"].tolist() == ["rs1", "target2"]
     assert harmonized["matched_by"].tolist() == ["id", "position_alleles"]
     assert summary["n_harmonized_output"] == 2
+
+
+def test_prepare_sumstats_common_can_reuse_standardized_source_dir(tmp_path):
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        "summary_statistics:\n"
+        "  cad:\n"
+        "    file: raw.tsv\n"
+        "    accession: GCSTTEST\n"
+        "    variant_id_strategy: decipehr\n",
+        encoding="utf-8",
+    )
+    source_dir = tmp_path / "source_standardized"
+    source_dir.mkdir()
+    pd.DataFrame(
+        {
+            "SNP": ["rs1"],
+            "CHR": [1],
+            "BP": [100],
+            "A1": ["A"],
+            "A2": ["G"],
+            "P": [0.01],
+            "BETA": [0.2],
+        }
+    ).to_csv(source_dir / "cad.GCSTTEST.standardized.tsv.gz", sep="\t", index=False)
+    pvar = tmp_path / "target.pvar"
+    pvar.write_text("#CHROM POS ID REF ALT\n1 100 rs1 A G\n", encoding="utf-8")
+    out_dir = tmp_path / "final" / "sumstats"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/prepare_sumstats_common.py",
+            "--disease",
+            "cad",
+            "--manifest",
+            str(manifest),
+            "--sumstats-root",
+            str(tmp_path / "raw_root"),
+            "--target-pvar",
+            str(pvar),
+            "--out-dir",
+            str(out_dir),
+            "--standardized-source-dir",
+            str(source_dir),
+        ],
+        check=True,
+    )
+
+    harmonized = read_table(out_dir / "harmonized" / "cad.GCSTTEST.harmonized.tsv.gz")
+    summary = json.loads(
+        (out_dir / "reports" / "cad.GCSTTEST.harmonized.summary.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert harmonized["SNP"].tolist() == ["rs1"]
+    assert summary["n_harmonized_output"] == 1
+    assert not (out_dir / "standardized" / "cad.GCSTTEST.standardized.tsv.gz").exists()

@@ -29,11 +29,11 @@ from decipehr.tabpfn_ensemble import (
 DEFAULT_CONFIG = "configs/default.yaml"
 DEFAULT_ELIGIBILITY_CONFIG = "configs/disease_eligibility.yaml"
 DEFAULT_TRAIN_PHENOTYPE = (
-    "/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/"
+    "data/raw/training_phase/phenotype_files/"
     "Training_Cov_file.txt"
 )
 DEFAULT_VALIDATION_COVARIATES = (
-    "/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/"
+    "data/raw/training_phase/phenotype_files/"
     "Testing_Cov_file.txt"
 )
 DEFAULT_BASE_URL = "https://api.priorlabs.ai"

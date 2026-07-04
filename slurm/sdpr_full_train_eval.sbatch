@@ -6,15 +6,15 @@
 #SBATCH --time=06:00:00
 #SBATCH --partition=cpu_short
 #SBATCH --job-name=sdpr_full_eval
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/official_validation_sdpr/sdpr_full_eval-%J.log
+#SBATCH --output=logs/official_validation_sdpr/sdpr_full_eval-%J.log
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DISEASE="${DISEASE:-}"
 
-if [[ -f /gpfs/home/jm10850/.bashrc ]]; then
-  source /gpfs/home/jm10850/.bashrc
+if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
+  source "$HOME/.bashrc"
 fi
 
 set -u
@@ -30,8 +30,8 @@ PLINK_MODULE="${PLINK_MODULE:-plink/2.0-20260228}"
 if command -v module >/dev/null 2>&1; then
   module load "$PLINK_MODULE" || true
 fi
-if ! command -v plink2 >/dev/null 2>&1 && [[ -x /gpfs/share/apps/plink/2.0-20260228/plink2 ]]; then
-  export PATH="/gpfs/share/apps/plink/2.0-20260228:$PATH"
+if ! command -v plink2 >/dev/null 2>&1 && [[ -n "${PLINK2_DIR:-}" && -x "$PLINK2_DIR/plink2" ]]; then
+  export PATH="$PLINK2_DIR:$PATH"
 fi
 
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-16}"

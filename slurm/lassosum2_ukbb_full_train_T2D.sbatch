@@ -7,8 +7,8 @@
 #SBATCH --partition=cpu_medium
 #SBATCH --array=1-1%1
 #SBATCH --job-name=lassosum2_ukbb_T2D
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/lassosum2_ukbb_full_train/T2D-%A_%a.log
+#SBATCH --output=logs/lassosum2_ukbb_full_train/T2D-%A_%a.log
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export DISEASE=T2D
 source "$REPO_DIR/slurm/lassosum2_ukbb_full_train.sbatch"

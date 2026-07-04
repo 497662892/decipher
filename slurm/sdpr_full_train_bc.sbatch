@@ -7,8 +7,8 @@
 #SBATCH --partition=cpu_medium
 #SBATCH --array=1-22%22
 #SBATCH --job-name=sdpr_full_bc
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/sdpr_full_train/bc-%A_%a.log
+#SBATCH --output=logs/sdpr_full_train/bc-%A_%a.log
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export DISEASE=bc
 source "$REPO_DIR/slurm/sdpr_full_train.sbatch"

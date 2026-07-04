@@ -23,15 +23,15 @@ from decipehr.validation import (
 )
 
 DEFAULT_TRAIN_PHENOTYPE = (
-    "/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/"
+    "data/raw/training_phase/phenotype_files/"
     "Training_Cov_file.txt"
 )
 DEFAULT_LABELLED_PHENOTYPE = (
-    "/gpfs/data/deciphEHRlab/deciphEHRdream/holdout_phase/phenotype_files/"
+    "data/raw/holdout_phase/phenotype_files/"
     "Training_Phase_Cov_file_with_Phenotype.txt"
 )
 DEFAULT_VALIDATION_COVARIATES = (
-    "/gpfs/data/deciphEHRlab/deciphEHRdream/training_phase/phenotype_files/"
+    "data/raw/training_phase/phenotype_files/"
     "Testing_Cov_file.txt"
 )
 
@@ -217,6 +217,25 @@ def _bootstrap_metrics(
     return metric_rows, sample_rows
 
 
+def _summarize_point_metrics(metrics: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
+    """Expose point estimates with the same *_mean columns used by bootstrap summaries."""
+    if metrics.empty:
+        return pd.DataFrame()
+    require_columns(metrics, group_cols, "point metrics")
+    exclude = set(group_cols)
+    metric_cols = [
+        col
+        for col in metrics.columns
+        if col not in exclude and pd.api.types.is_numeric_dtype(metrics[col])
+    ]
+    if not metric_cols:
+        return metrics[group_cols].drop_duplicates().reset_index(drop=True)
+    summary = metrics.groupby(group_cols, dropna=False, sort=True)[metric_cols].mean().reset_index()
+    summary = summary.rename(columns={col: f"{col}_mean" for col in metric_cols})
+    summary.insert(len(group_cols), "n_repeats", 0)
+    return summary
+
+
 def _resolve_n_bootstraps(n_bootstraps: int | None, n_repeats: int | None) -> int:
     if n_bootstraps is not None:
         return n_bootstraps
@@ -281,6 +300,11 @@ def main() -> None:
     parser.add_argument("--eligibility-config", default="configs/disease_eligibility.yaml")
     parser.add_argument("--n-bootstraps", type=int, default=None)
     parser.add_argument(
+        "--point-only",
+        action="store_true",
+        help="Skip bootstrap resampling and write summary_metrics.csv from point estimates.",
+    )
+    parser.add_argument(
         "--n-repeats",
         type=int,
         default=None,
@@ -318,6 +342,9 @@ def main() -> None:
     parser.add_argument("--validation-phenotype-out", default=None)
     parser.add_argument("--out-dir", required=True)
     args = parser.parse_args()
+
+    if args.point_only:
+        args.n_bootstraps = 0
 
     patient_col = args.patient_col
     labels = parse_csv_list(args.labels)
@@ -535,8 +562,12 @@ def main() -> None:
     write_table(validation_counts, out_dir / "validation_eligibility_counts.csv")
     write_table(validation_counts, out_dir / "eligibility_counts.csv")
     summary_group_cols = ["model_name", "disease", "method", *prs_param_cols]
-    present_group_cols = [col for col in summary_group_cols if col in bootstrap_metrics.columns]
-    summary = summarize_repeated_metrics(bootstrap_metrics, present_group_cols)
+    summary_source = bootstrap_metrics if n_bootstraps > 0 else point_metrics
+    present_group_cols = [col for col in summary_group_cols if col in summary_source.columns]
+    if n_bootstraps > 0:
+        summary = summarize_repeated_metrics(bootstrap_metrics, present_group_cols)
+    else:
+        summary = _summarize_point_metrics(point_metrics, present_group_cols)
     write_table(summary, out_dir / "summary_metrics.csv")
     if args.write_predictions:
         predictions = pd.concat(prediction_frames, ignore_index=True)
@@ -546,7 +577,8 @@ def main() -> None:
         json.dumps(summary_rows, indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    print(f"Wrote official bootstrap validation outputs to {out_dir}")
+    validation_mode = "point-only" if n_bootstraps == 0 else "bootstrap"
+    print(f"Wrote official {validation_mode} validation outputs to {out_dir}")
 
 
 if __name__ == "__main__":

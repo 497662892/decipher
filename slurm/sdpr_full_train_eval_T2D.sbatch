@@ -6,8 +6,8 @@
 #SBATCH --time=06:00:00
 #SBATCH --partition=cpu_short
 #SBATCH --job-name=sdpr_eval_T2D
-#SBATCH --output=/gpfs/data/shenlab/Jiajian/HW/decipehr/logs/official_validation_sdpr/T2D-%J.log
+#SBATCH --output=logs/official_validation_sdpr/T2D-%J.log
 
-REPO_DIR="${REPO_DIR:-/gpfs/data/shenlab/Jiajian/HW/decipehr}"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 export DISEASE=T2D
 source "$REPO_DIR/slurm/sdpr_full_train_eval.sbatch"

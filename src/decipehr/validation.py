@@ -90,8 +90,10 @@ def iter_bootstrap_indices(
     """Yield bootstrap index vectors sampled with replacement."""
     if n < 1:
         raise ValueError("n must be at least 1")
-    if n_resamples < 1:
-        raise ValueError("n_resamples must be at least 1")
+    if n_resamples < 0:
+        raise ValueError("n_resamples must be non-negative")
+    if n_resamples == 0:
+        return
     if sample_size is None:
         sample_size = n
     if sample_size < 1:
