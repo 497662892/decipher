@@ -53,20 +53,32 @@ The main held-out table uses the same official logistic validation interface:
 
 ### Held-Out Validation Baselines
 
-| Disease | Method | AUC | OR90 |
-|---|---|---:|---:|
-| CAD | Covariates only | 0.791 | 5.05 |
-| CAD | Best single PRS: MegaPRS annotated + covariates | 0.795 | 5.92 |
-| CAD | TabPFN-3 PRS-only score + covariates | 0.791 | 5.05 |
-| CAD | Final TabPFN-3 score + covariates | 0.809 | 7.49 |
-| BC | Covariates only | 0.614 | 1.43 |
-| BC | Best single PRS: lassosum2 + covariates | 0.644 | 2.09 |
-| BC | TabPFN-3 PRS-only score + covariates | 0.628 | 1.77 |
-| BC | Final TabPFN-3 score + covariates | 0.662 | 2.46 |
-| T2D | Covariates only | 0.705 | 4.30 |
-| T2D | Best single PRS: MegaPRS annotated + covariates | 0.741 | 6.90 |
-| T2D | TabPFN-3 PRS-only score + covariates | 0.732 | 5.75 |
-| T2D | Final TabPFN-3 score + covariates | 0.763 | 8.04 |
+**CAD**
+
+| Method | AUC | OR90 |
+|---|---:|---:|
+| Covariates only | 0.791 | 5.05 |
+| Best single PRS: MegaPRS annotated + covariates | 0.795 | 5.92 |
+| TabPFN-3 PRS-only score + covariates | 0.791 | 5.05 |
+| Final TabPFN-3 score + covariates | 0.809 | 7.49 |
+
+**BC**
+
+| Method | AUC | OR90 |
+|---|---:|---:|
+| Covariates only | 0.614 | 1.43 |
+| Best single PRS: lassosum2 + covariates | 0.644 | 2.09 |
+| TabPFN-3 PRS-only score + covariates | 0.628 | 1.77 |
+| Final TabPFN-3 score + covariates | 0.662 | 2.46 |
+
+**T2D**
+
+| Method | AUC | OR90 |
+|---|---:|---:|
+| Covariates only | 0.705 | 4.30 |
+| Best single PRS: MegaPRS annotated + covariates | 0.741 | 6.90 |
+| TabPFN-3 PRS-only score + covariates | 0.732 | 5.75 |
+| Final TabPFN-3 score + covariates | 0.763 | 8.04 |
 
 Main takeaways:
 
@@ -103,7 +115,8 @@ input set was carried into the final holdout pipeline.
 ## Final Model
 
 The final selected approach was a disease-specific TabPFN-3 ensemble using
-selected PRS inputs plus `sex`, `age_sd`, and `PC1_sd` to `PC10_sd`.
+selected PRS inputs plus covariates as model input features. The covariates are
+`sex`, `age_sd`, and `PC1_sd` to `PC10_sd`.
 
 | Disease | Kept PRS families | Dropped PRS families |
 |---|---|---|
@@ -114,6 +127,8 @@ selected PRS inputs plus `sex`, `age_sd`, and `PC1_sd` to `PC10_sd`.
 Final scoring:
 
 - TabPFN-3 with `clip_eps=0.001` and `n_estimators=16`.
+- TabPFN input features: selected PRS family scores plus `sex`, `age_sd`, and
+  `PC1_sd` to `PC10_sd`.
 - Train-val scores: shared 5-fold out-of-fold TabPFN logits.
 - Holdout scores: TabPFN logits using all eligible train-val patients as
   context.
