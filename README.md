@@ -40,24 +40,51 @@ The workflow has three layers:
 
 ## Validation Summary
 
-Primary metric: `OR90`, the odds ratio comparing the top 10% of predictions
-against the lower 90%. AUC is included as a familiar diagnostic.
+Primary metric: `OR90`, the odds ratio comparing the top 10% of scores against
+the lower 90%. AUC is included as a familiar diagnostic.
 
-| Disease | Covariates only AUC / OR90 | Best single PRS AUC / OR90 | Earlier PRS-only TabPFN AUC / OR90 | Final TabPFN setting | Final official-val AUC / OR90 | Final direct-logit AUC / OR90 |
-|---|---:|---:|---:|---|---:|---:|
-| CAD | 0.791 / 5.05 | PRS-CS 0.796 / 5.36 | 0.791 / 5.05 | drop SBayesRC, lassosum2, P+T | 0.808 / 7.49 | 0.808 / 7.32 |
-| BC | 0.614 / 1.43 | lassosum2 0.644 / 2.09 | 0.628 / 1.77 | drop SDPR, MegaPRS no annot | 0.665 / 2.09 | 0.669 / 2.54 |
-| T2D | 0.705 / 4.30 | MegaPRS annotated 0.741 / 6.52 | 0.732 / 5.75 | drop P+T, PRS-CS, lassosum2 | 0.758 / 6.65 | 0.759 / 6.90 |
+The table separates three different questions:
 
-Notes:
+- **Score-only**: rank validation samples by the PRS or TabPFN score directly.
+  No `sex`, `age_sd`, or PC covariates are used.
+- **Covariates only**: official validation logistic model using covariates but
+  no PRS.
+- **Score + covariates**: official validation logistic model using covariates
+  plus one PRS or ensemble score.
+- Breast cancer metrics use the female-only eligibility rule in
+  `configs/disease_eligibility.yaml`.
 
-- The PRS-only TabPFN baseline exists in earlier records under
-  `outputs/tabpfn3_grid_nonannotated_a0p20/.../official_validation_prs_only/`.
-  It was useful as a baseline but was not the final model.
-- The final official-val column evaluates the TabPFN-derived score through the
-  fixed official validation logistic interface.
-- The final direct-logit column evaluates the raw TabPFN score, matching the
-  final submission scoring style more closely.
+### Held-Out Validation Baselines
+
+| Disease | Covariates only AUC / OR90 | Best single PRS score-only AUC / OR90 | PRS-only TabPFN-3 score-only AUC / OR90 | Best single PRS + covariates AUC / OR90 | Final TabPFN + covariates AUC / OR90 |
+|---|---:|---:|---:|---:|---:|
+| CAD | 0.791 / 5.05 | P+T soft-z 0.551 / 1.55 | 0.576 / 1.53 | MegaPRS annotated 0.795 / 5.92 | 0.809 / 7.49 |
+| BC | 0.614 / 1.43 | lassosum2 soft-z 0.585 / 1.96 | 0.572 / 2.02 | lassosum2 0.644 / 2.09 | 0.662 / 2.46 |
+| T2D | 0.705 / 4.30 | MegaPRS annotated raw 0.647 / 3.65 | 0.636 / 2.29 | MegaPRS annotated 0.741 / 6.90 | 0.763 / 8.04 |
+
+Main takeaways:
+
+- Raw PRS scores alone carried useful signal, especially for T2D, but were not
+  competitive with covariate-adjusted models.
+- The PRS-only TabPFN-3 baseline was important as a sanity check: it tested
+  whether nonlinear ensembling of PRS scores alone was enough. It was not.
+- Most of the final gain came from combining selected PRS families with
+  `sex`, `age_sd`, and `PC1_sd` to `PC10_sd`.
+
+### Final Selection Check
+
+These rows compare the final disease-specific input set on shared train-val
+5-fold predictions and on the held-out validation split.
+
+| Disease | Train-val 5CV AUC / OR90 | Held-out validation AUC / OR90 |
+|---|---:|---:|
+| CAD | 0.796 / 6.95 | 0.809 / 7.49 |
+| BC | 0.642 / 1.75 | 0.662 / 2.46 |
+| T2D | 0.750 / 6.54 | 0.763 / 8.04 |
+
+The final selected setting was not simply "use every PRS". Disease-specific
+input dropping improved or stabilized the train-val comparison, then the same
+input set was carried into the final holdout pipeline.
 
 ## Final Model
 
