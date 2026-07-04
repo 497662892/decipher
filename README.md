@@ -56,11 +56,23 @@ The table separates three different questions:
 
 ### Held-Out Validation Baselines
 
-| Disease | Covariates only AUC / OR90 | Best single PRS score-only AUC / OR90 | PRS-only TabPFN-3 score-only AUC / OR90 | Best single PRS + covariates AUC / OR90 | Final TabPFN + covariates AUC / OR90 |
-|---|---:|---:|---:|---:|---:|
-| CAD | 0.791 / 5.05 | P+T soft-z 0.551 / 1.55 | 0.576 / 1.53 | MegaPRS annotated 0.795 / 5.92 | 0.809 / 7.49 |
-| BC | 0.614 / 1.43 | lassosum2 soft-z 0.585 / 1.96 | 0.572 / 2.02 | lassosum2 0.644 / 2.09 | 0.662 / 2.46 |
-| T2D | 0.705 / 4.30 | MegaPRS annotated raw 0.647 / 3.65 | 0.636 / 2.29 | MegaPRS annotated 0.741 / 6.90 | 0.763 / 8.04 |
+| Disease | Method | AUC | OR90 |
+|---|---|---:|---:|
+| CAD | Covariates only | 0.791 | 5.05 |
+| CAD | P+T soft-z, score only | 0.551 | 1.55 |
+| CAD | TabPFN-3, PRS scores only | 0.576 | 1.53 |
+| CAD | MegaPRS annotated + covariates | 0.795 | 5.92 |
+| CAD | Final TabPFN-3 + covariates | 0.809 | 7.49 |
+| BC | Covariates only | 0.614 | 1.43 |
+| BC | lassosum2 soft-z, score only | 0.585 | 1.96 |
+| BC | TabPFN-3, PRS scores only | 0.572 | 2.02 |
+| BC | lassosum2 + covariates | 0.644 | 2.09 |
+| BC | Final TabPFN-3 + covariates | 0.662 | 2.46 |
+| T2D | Covariates only | 0.705 | 4.30 |
+| T2D | MegaPRS annotated raw, score only | 0.647 | 3.65 |
+| T2D | TabPFN-3, PRS scores only | 0.636 | 2.29 |
+| T2D | MegaPRS annotated + covariates | 0.741 | 6.90 |
+| T2D | Final TabPFN-3 + covariates | 0.763 | 8.04 |
 
 Main takeaways:
 
@@ -76,11 +88,14 @@ Main takeaways:
 These rows compare the final disease-specific input set on shared train-val
 5-fold predictions and on the held-out validation split.
 
-| Disease | Train-val 5CV AUC / OR90 | Held-out validation AUC / OR90 |
-|---|---:|---:|
-| CAD | 0.796 / 6.95 | 0.809 / 7.49 |
-| BC | 0.642 / 1.75 | 0.662 / 2.46 |
-| T2D | 0.750 / 6.54 | 0.763 / 8.04 |
+| Disease | Evaluation | AUC | OR90 |
+|---|---|---:|---:|
+| CAD | Train-val 5CV | 0.796 | 6.95 |
+| CAD | Held-out validation | 0.809 | 7.49 |
+| BC | Train-val 5CV | 0.642 | 1.75 |
+| BC | Held-out validation | 0.662 | 2.46 |
+| T2D | Train-val 5CV | 0.750 | 6.54 |
+| T2D | Held-out validation | 0.763 | 8.04 |
 
 The final selected setting was not simply "use every PRS". Disease-specific
 input dropping improved or stabilized the train-val comparison, then the same
