@@ -1,0 +1,58 @@
+# Candidate resources, not an assertion of permission or cohort independence.
+# inventory writes Catalog metadata and an editable review file under outputs/.
+schema_version: 1
+score_sets:
+  - name: dprism_t2d
+    disease: T2D
+    family: D-PRISM
+    role: published_components
+    note: Preserve trainedfor and source-weight labels from Catalog metadata; these are not independent discoveries.
+    ids: [PGS005353, PGS005354, PGS005355, PGS005356, PGS005357,
+          PGS005358, PGS005359, PGS005360, PGS005361, PGS005362,
+          PGS005363, PGS005364, PGS005365, PGS005366, PGS005367,
+          PGS005368, PGS005369, PGS005370, PGS005371, PGS005372,
+          PGS005373, PGS005374, PGS005375, PGS005376, PGS005377]
+  - name: prscsx_t2d
+    disease: T2D
+    family: PRS-CSx
+    role: published_final_score
+    ids: [PGS002308]
+  - name: gpsmult_cad
+    disease: cad
+    family: GPS_Mult
+    role: published_final_score
+    ids: [PGS003725]
+  - name: prscsx_cad
+    disease: cad
+    family: PRS-CSx
+    role: published_final_score
+    ids: [PGS004696]
+  - name: mixprs_cad
+    disease: cad
+    family: MIXPRS+
+    role: published_final_score
+    note: EAS-targeted final score; do not describe it as an independent ancestry component.
+    ids: [PGS012558]
+  - name: prs313_bc
+    disease: bc
+    family: PRS313
+    role: published_final_score
+    ids: [PGS000004]
+  - name: african_targeted_bc
+    disease: bc
+    family: Li2026
+    role: published_final_score
+    note: Overall breast cancer models targeted to African ancestry populations; retain distinct method labels.
+    ids: [PGS005378, PGS005379]
+  - name: intervene_megaprs_bc
+    disease: bc
+    family: MegaPRS
+    role: published_final_score
+    note: European-derived overall-BC model; added before outcome evaluation after two original BC candidates failed the fixed 75 percent coverage rule.
+    ids: [PGS004869]
+  - name: tpmi_prscs_bc
+    disease: bc
+    family: PRS-CS
+    role: published_final_score
+    note: East-Asian-derived female-BC model; added in the same outcome-blind coverage amendment.
+    ids: [PGS018538]

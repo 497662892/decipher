@@ -64,6 +64,26 @@ def test_tabpfn_feature_transformer_standardizes_prs_and_encodes_covariates():
     assert matrix.loc[0, "cov__sex__Male"] == 0.0
 
 
+def test_tabpfn_feature_transformer_accepts_covariates_without_prs():
+    frame = pd.DataFrame(
+        {
+            "age_sd": [-1.0, 0.0, 1.0],
+            "sex": ["Female", "Male", "Female"],
+        }
+    )
+
+    transformer = TabPFNFeatureTransformer.fit(
+        frame,
+        prs_cols=[],
+        covariates=["age_sd", "sex"],
+        include_covariates=True,
+    )
+    matrix = transformer.transform(frame)
+
+    assert not any(column.startswith("prs__") for column in matrix.columns)
+    assert set(transformer.summary()["feature_type"]) == {"covariate"}
+
+
 def test_tabpfn_probability_logits_are_clipped_and_train_scaled():
     train_logits = logit_from_probability(pd.Series([0.0, 0.5, 1.0]).to_numpy(), eps=0.01)
     validation_logits = logit_from_probability(pd.Series([0.8]).to_numpy(), eps=0.01)

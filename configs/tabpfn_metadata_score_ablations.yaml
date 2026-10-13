@@ -1,0 +1,34 @@
+project:
+  seed: 42
+  diseases: [cad, bc, T2D]
+  n_outer_folds: 5
+  n_inner_folds: 5
+  model_definition: final_cv_selected_5_6_5
+
+paths:
+  base_config: configs/default.yaml
+  phenotype: data/processed/final/train_val_phenotype.csv
+  splits: data/processed/final/splits/train_val_5fold_1000g_hard_diagnostic_seed42.disease_long.csv
+  prs_long_template: outputs/tabpfn3_final_trainval_selected_drop3_drop2_drop3_inputs/{disease}.train_long.csv
+  prs_selection_manifest: outputs/tabpfn3_final_trainval_selected_drop3_drop2_drop3_inputs/final_selection_manifest.csv
+  eligibility_config: configs/disease_eligibility.yaml
+  model_cache: outputs/tabpfn-model-cache
+  output_root: outputs/tabpfn_metadata_score_ablations
+
+metadata:
+  sex: sex
+  age: age_sd
+  pcs: [PC1_sd, PC2_sd, PC3_sd, PC4_sd, PC5_sd, PC6_sd, PC7_sd, PC8_sd, PC9_sd, PC10_sd]
+  final: [sex, age_sd, PC1_sd, PC2_sd, PC3_sd, PC4_sd, PC5_sd, PC6_sd, PC7_sd, PC8_sd, PC9_sd, PC10_sd]
+
+tabpfn:
+  model_version: v3
+  model_path: outputs/tabpfn-model-cache/tabpfn-v3-classifier-v3_default.ckpt
+  n_estimators: 16
+  clip_eps: 0.001
+  score_scale: train_sd
+  class_weight: none
+
+summary:
+  paired_bootstrap_resamples: 2000
+  n_jobs: 4

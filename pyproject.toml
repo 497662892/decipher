@@ -28,6 +28,12 @@ tabpfn = [
     "tabpfn>=8,<9",
     "torch==2.9.1",
 ]
+ablation = [
+    "xgboost-cpu>=3,<4",
+]
+prs-benchmark = [
+    "catboost>=1.2,<2",
+]
 
 [build-system]
 requires = ["hatchling"]

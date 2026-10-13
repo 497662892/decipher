@@ -11,7 +11,7 @@
 
 set -eo pipefail
 
-REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+REPO_DIR="${REPO_DIR:-${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}}"
 cd "$REPO_DIR"
 
 if [[ -n "${HOME:-}" && -f "$HOME/.bashrc" ]]; then
@@ -49,7 +49,9 @@ export HF_HUB_DISABLE_TELEMETRY="${HF_HUB_DISABLE_TELEMETRY:-1}"
 mkdir -p "$UV_CACHE_DIR" "$HF_HOME" "$TABPFN_MODEL_CACHE_DIR" logs/tabpfn_ensemble
 
 TABPFN_AUTH_READY=0
-if [[ -n "${TABPFN_TOKEN:-}" ]]; then
+if [[ -n "${TABPFN_MODEL_PATH:-}" && -f "$TABPFN_MODEL_PATH" ]]; then
+  TABPFN_AUTH_READY=1
+elif [[ -n "${TABPFN_TOKEN:-}" ]]; then
   TABPFN_AUTH_READY=1
 elif [[ -n "${HOME:-}" && -s "$HOME/.cache/tabpfn/auth_token" ]]; then
   TABPFN_AUTH_READY=1
@@ -59,14 +61,16 @@ fi
 
 if [[ "$TABPFN_AUTH_READY" != "1" ]]; then
   {
-    echo "Missing TabPFN authentication for this non-interactive Slurm job."
-    echo "Set TABPFN_TOKEN in $TABPFN_ENV_FILE, or run an interactive TabPFN login once."
+    echo "Missing a local TabPFN checkpoint or authentication for this non-interactive Slurm job."
+    echo "Set TABPFN_MODEL_PATH to an existing checkpoint, set TABPFN_TOKEN in"
+    echo "$TABPFN_ENV_FILE, or run an interactive TabPFN login once."
     echo "The token file is intentionally ignored by git."
   } >&2
   exit 2
 fi
 
 CONFIG="${CONFIG:-configs/default.yaml}"
+CONFIG_OVERRIDE="${CONFIG_OVERRIDE:-}"
 ELIGIBILITY_CONFIG="${ELIGIBILITY_CONFIG:-configs/disease_eligibility.yaml}"
 LABELS="${LABELS:-cad,bc,T2D}"
 ENSEMBLE_INPUT_DIR="${ENSEMBLE_INPUT_DIR:-outputs/ensemble_inputs_nonannotated_a0p20}"
@@ -124,6 +128,11 @@ if [[ -n "${TABPFN_MODEL_CACHE_DIR:-}" ]]; then
   TABPFN_CACHE_ARGS=(--tabpfn-model-cache-dir "$TABPFN_MODEL_CACHE_DIR")
 fi
 
+CONFIG_OVERRIDE_ARGS=()
+if [[ -n "$CONFIG_OVERRIDE" ]]; then
+  CONFIG_OVERRIDE_ARGS=(--config-override "$CONFIG_OVERRIDE")
+fi
+
 echo "Started TabPFN ensemble at $(date)"
 echo "Using ensemble inputs under $ENSEMBLE_INPUT_DIR"
 echo "Writing TabPFN ensemble outputs under $OUT_DIR"
@@ -145,6 +154,7 @@ fi
 PYTHON_BIN="${PYTHON_BIN:-$REPO_DIR/.venv/bin/python}"
 "$PYTHON_BIN" scripts/build_tabpfn_ensemble_prs.py \
   --config "$CONFIG" \
+  "${CONFIG_OVERRIDE_ARGS[@]}" \
   --labels "$LABELS" \
   --eligibility-config "$ELIGIBILITY_CONFIG" \
   --train-prs-long-scores "$ENSEMBLE_INPUT_DIR/{disease}.train_long.csv" \

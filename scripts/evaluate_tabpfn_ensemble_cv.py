@@ -24,6 +24,7 @@ from decipehr.config import load_config
 from decipehr.eligibility import eligible_counts, filter_eligible, load_eligibility_rules
 from decipehr.ensemble import pivot_long_prs_scores
 from decipehr.io import read_table, write_table
+from decipehr.metadata_score_ablations import resolve_score_and_final_covariates
 from decipehr.metrics import (
     binary_metrics,
     challenge_metrics,
@@ -224,6 +225,22 @@ def main() -> None:
     parser.add_argument("--disease", default=None)
     parser.add_argument("--labels", default=None)
     parser.add_argument("--covariates", default=None)
+    parser.add_argument(
+        "--score-covariates",
+        default=None,
+        help=(
+            "Covariates used only inside TabPFN when generating its score. "
+            "Defaults to --covariates, then the configured covariates."
+        ),
+    )
+    parser.add_argument(
+        "--final-covariates",
+        default=None,
+        help=(
+            "Covariates used with the TabPFN score in the final logistic model. "
+            "Defaults to --covariates, then the configured covariates."
+        ),
+    )
     parser.add_argument("--patient-col", default=None)
     parser.add_argument("--phenotype", default="data/processed/final/train_val_phenotype.csv")
     parser.add_argument(
@@ -264,7 +281,25 @@ def main() -> None:
     config = load_config(args.config, args.config_override)
     columns = _require_mapping(config, "columns")
     labels = _labels(args, columns)
-    covariates = parse_csv_list(args.covariates or _csv_from_config(columns.get("covariates"), "columns.covariates"))
+    default_covariates = parse_csv_list(
+        _csv_from_config(columns.get("covariates"), "columns.covariates")
+    )
+    score_covariates, final_covariates = resolve_score_and_final_covariates(
+        default_covariates=default_covariates,
+        shared_covariates=(
+            parse_csv_list(args.covariates) if args.covariates is not None else None
+        ),
+        score_covariates=(
+            parse_csv_list(args.score_covariates)
+            if args.score_covariates is not None
+            else None
+        ),
+        final_covariates=(
+            parse_csv_list(args.final_covariates)
+            if args.final_covariates is not None
+            else None
+        ),
+    )
     patient_col = args.patient_col or _required_value(columns, "patient_id", "columns")
     seed = args.seed if args.seed is not None else int(config.get("project", {}).get("seed", 42))
     inner_folds = args.inner_folds if args.inner_folds is not None else int(config.get("project", {}).get("n_folds", 5))
@@ -274,7 +309,8 @@ def main() -> None:
 
     phenotype = read_table(args.phenotype)
     splits = read_table(args.splits)
-    require_columns(phenotype, [patient_col, *labels, *covariates], "phenotype")
+    required_covariates = list(dict.fromkeys([*score_covariates, *final_covariates]))
+    require_columns(phenotype, [patient_col, *labels, *required_covariates], "phenotype")
     require_columns(splits, [patient_col, "disease", "fold"], "CV splits")
     validate_unique(phenotype, patient_col, "phenotype")
 
@@ -336,7 +372,7 @@ def main() -> None:
                     context=context,
                     validation=validation,
                     prs_cols=prs_cols,
-                    covariates=covariates,
+                    covariates=score_covariates,
                     patient_col=patient_col,
                     inner_folds=inner_folds,
                     seed=seed,
@@ -349,6 +385,11 @@ def main() -> None:
                     clip_eps=args.clip_eps,
                     score_scale=args.score_scale,
                 )
+                fit_summary["score_covariates"] = ";".join(
+                    score_covariates if strategy == "covariate_adjusted" else []
+                )
+                fit_summary["final_covariates"] = ";".join(final_covariates)
+                fit_summary["n_final_covariates_requested"] = len(final_covariates)
                 feature_summaries.append(feature_summary)
                 fit_summaries.append(fit_summary)
 
@@ -359,7 +400,9 @@ def main() -> None:
                 tabpfn_score_rows.append(score_frame[[patient_col, "disease", "fold", "strategy", "prs"]])
 
                 for calibration_method in calibration_methods:
-                    feature_cols = _feature_cols_for_calibration(calibration_method, covariates)
+                    feature_cols = _feature_cols_for_calibration(
+                        calibration_method, final_covariates
+                    )
                     method = f"{args.model_name}_{strategy}_{calibration_method}"
                     pred = fit_predict_logistic(
                         train=train_scored,
@@ -428,6 +471,8 @@ def main() -> None:
                 "train_prediction_mode": args.train_prediction_mode,
                 "inner_folds": inner_folds,
                 "class_weight": args.class_weight,
+                "score_covariates": score_covariates,
+                "final_covariates": final_covariates,
                 "tabpfn_model_version": model_version_label,
                 "tabpfn_model_path": str(classifier_kwargs.get("model_path", "auto")),
             },

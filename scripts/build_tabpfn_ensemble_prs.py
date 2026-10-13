@@ -74,7 +74,7 @@ def _labels(args: argparse.Namespace, columns: dict[str, Any]) -> list[str]:
 
 
 def _strategies(value: str) -> list[TabPFNStrategy]:
-    allowed = {"prs_only", "covariate_adjusted"}
+    allowed = {"covariate_only", "prs_only", "covariate_adjusted"}
     parsed = []
     for item in parse_csv_list(value):
         if item not in allowed:
@@ -256,7 +256,8 @@ def _build_strategy_scores(
     clip_eps: float,
     score_scale: str,
 ) -> tuple[pd.Series, pd.Series, pd.DataFrame, dict[str, Any]]:
-    include_covariates = strategy == "covariate_adjusted"
+    include_covariates = strategy in {"covariate_only", "covariate_adjusted"}
+    model_prs_cols = [] if strategy == "covariate_only" else prs_cols
     context = filter_eligible(train_base, disease, eligibility_rules).copy()
     validation_eval = filter_eligible(validation_base, disease, eligibility_rules).copy()
     if context.empty:
@@ -273,7 +274,7 @@ def _build_strategy_scores(
             classifier_cls=classifier_cls,
             context=context,
             y_context=y_context,
-            prs_cols=prs_cols,
+            prs_cols=model_prs_cols,
             covariates=covariates,
             include_covariates=include_covariates,
             n_folds=n_folds,
@@ -288,7 +289,7 @@ def _build_strategy_scores(
             context=context,
             y_context=y_context,
             eval_frame=context,
-            prs_cols=prs_cols,
+            prs_cols=model_prs_cols,
             covariates=covariates,
             include_covariates=include_covariates,
             device=device,
@@ -305,7 +306,7 @@ def _build_strategy_scores(
         context=context,
         y_context=y_context,
         eval_frame=validation_eval,
-        prs_cols=prs_cols,
+        prs_cols=model_prs_cols,
         covariates=covariates,
         include_covariates=include_covariates,
         device=device,
@@ -342,7 +343,7 @@ def _build_strategy_scores(
         "n_context": int(len(context)),
         "context_cases": int(y_context.sum()),
         "n_validation_scored": int(len(validation_eval)),
-        "n_prs_features": int(len(prs_cols)),
+        "n_prs_features": int(len(model_prs_cols)),
         "n_covariates_requested": int(len(covariates) if include_covariates else 0),
         "train_prediction_mode": train_prediction_mode,
         "n_oof_folds": int(actual_folds),
@@ -405,6 +406,12 @@ def _write_validation_commands(
             str(strategy_dir / "validation_prs_scores.csv"),
             "--eligibility-config",
             args.eligibility_config,
+            "--validation-phenotype-out",
+            str(
+                out_dir
+                / f"official_validation_{strategy}"
+                / "validation_phenotype.csv"
+            ),
             "--out-dir",
             str(out_dir / f"official_validation_{strategy}"),
         ]

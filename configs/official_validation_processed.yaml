@@ -1,0 +1,5 @@
+paths:
+  official_train_phenotype: data/processed/phenotype.csv
+  official_labelled_phenotype: data/processed/official_validation_phenotype.csv
+  official_validation_covariates: data/processed/official_validation_phenotype.csv
+  official_validation_phenotype: outputs/official_validation_phenotype.generated.csv

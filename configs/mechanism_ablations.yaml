@@ -1,0 +1,62 @@
+project:
+  seed: 42
+  diseases: [cad, bc, T2D]
+  n_folds: 5
+
+paths:
+  phenotype: data/processed/final/train_val_phenotype.csv
+  splits: data/processed/final/splits/train_val_5fold_1000g_hard_diagnostic_seed42.disease_long.csv
+  prs_long_template: outputs/final_tabpfn3_comparison_rerun_inputs/all8/{disease}.train_long.csv
+  ancestry_labels: outputs/final_ancestry_1000g/combined/target_1000G_hard_labels_pc10_margin0.5.train_val.tsv
+  eligibility_config: configs/disease_eligibility.yaml
+  output_root: outputs/mechanism_ablations
+
+columns:
+  patient_id: sampleid
+  ancestry_patient_id: sampleid
+  ancestry_group: hard_label
+  disease: disease
+  model: model
+  score: prs
+
+prs:
+  all: [pt, ldpred2, lassosum2, prscs, sdpr, megaprs_noannot, megaprs_annotated, sbayesrc]
+  selected:
+    cad: [ldpred2, megaprs_annotated, megaprs_noannot, prscs, sdpr]
+    bc: [lassosum2, ldpred2, megaprs_annotated, prscs, pt, sbayesrc]
+    T2D: [ldpred2, megaprs_annotated, megaprs_noannot, sbayesrc, sdpr]
+  canonical_best_single:
+    cad: prscs
+    bc: lassosum2
+    T2D: megaprs_annotated
+
+metadata:
+  age_sex: [sex, age_sd]
+  pcs: [PC1_sd, PC2_sd, PC3_sd, PC4_sd, PC5_sd, PC6_sd, PC7_sd, PC8_sd, PC9_sd, PC10_sd]
+  full: [sex, age_sd, PC1_sd, PC2_sd, PC3_sd, PC4_sd, PC5_sd, PC6_sd, PC7_sd, PC8_sd, PC9_sd, PC10_sd]
+  ancestry_group_feature: ancestry_group
+  age_sex_ancestry_group: [sex, age_sd, ancestry_group]
+
+tabpfn:
+  model_version: v3
+  model_path: outputs/tabpfn-model-cache/tabpfn-v3-classifier-v3_default.ckpt
+  n_estimators: 16
+  clip_eps: 0.001
+
+xgboost:
+  inner_folds: 3
+  n_estimators: 300
+  subsample: 0.8
+  colsample_bytree: 0.8
+  reg_lambda: 1.0
+  max_depth: [2, 4, 6]
+  learning_rate: [0.03, 0.1]
+  min_child_weight: [1, 10]
+
+summary:
+  paired_bootstrap_resamples: 2000
+  n_jobs: 1
+
+supplements:
+  corrected_metadata_score_summary: outputs/tabpfn_metadata_score_ablations/summary
+  ancestry_single_prs_bridge: outputs/ancestry_stratified_best_single_vs_tabpfn3

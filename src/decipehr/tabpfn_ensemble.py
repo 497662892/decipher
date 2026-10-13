@@ -9,7 +9,7 @@ from sklearn.model_selection import StratifiedKFold
 
 from decipehr.schema import require_columns
 
-TabPFNStrategy = Literal["prs_only", "covariate_adjusted"]
+TabPFNStrategy = Literal["covariate_only", "prs_only", "covariate_adjusted"]
 
 
 @dataclass(frozen=True)

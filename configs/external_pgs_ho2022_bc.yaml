@@ -1,0 +1,53 @@
+# Published supplemental weights, with local identifiers (not PGS Catalog accessions).
+# Preparation is authorized; Slurm scoring/evaluation has not been submitted.
+schema_version: 1
+source_build: GRCh37
+build: GRCh38
+target_cohort: NYU decipEHR official training/development cohort
+use_context: research
+chain_url: https://hgdownload.soe.ucsc.edu/goldenPath/hg19/liftOver/hg19ToHg38.over.chain.gz
+chain_sha256: 5c0598e500ceb5a78c73086929e8ef993aec309bcafb595139b53d440b125a1d
+resource_review: &review
+  include: true
+  trait_match: confirmed
+  allowed_use: allowed
+  sample_overlap: excluded
+  sample_overlap_scope: >-
+    Published discovery/development cohorts plus the existing project-owner declaration
+    of NYU independence. This is an analyst extension to these two components, not a
+    new owner attestation or a participant-level overlap audit.
+  participant_linkage_performed: false
+  aou_in_discovery_or_tuning: false
+  evidence:
+    - "Primary source: https://doi.org/10.1016/j.gim.2021.11.008"
+    - "PRS-CSx discovery uses BCAC Asian + BBJ (training set 2) and BCAC European (set 3); tuning uses MYBRCA/SGBCC. AoU is not among the reported discovery/tuning cohorts."
+    - "Original article is CC BY 4.0; cite Ho et al. and Supplementary Tables S3/S4. https://pmc.ncbi.nlm.nih.gov/articles/PMC7612481/"
+    - "Existing NYU independence provenance: outputs/external_pgs/run_20261010/weights.amended.lock.json. Participant linkage was not performed."
+    - "User requested considering these two components for the current cohort on 2026-10-12; this manifest prepares an exploratory 3-versus-5 score comparison."
+resources:
+  - id: LOCAL_HO2022_BC_ASN
+    name: ho2022_bc
+    disease: bc
+    family: PRS-CSx
+    component: ASN
+    role: jointly_estimated_ancestry_component
+    source_type: publication_supplement
+    source_path: outputs/external_pgs/ancestry_component_audit_20261012/EMS140660-supplement-TableS3.xlsx
+    source_sha256: 3b3e0690ad66babb74ba633ffee42664549352cdb271eef3e5a83adb7e9a0f9a
+    weight_url: https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7612481/supplementaryFiles
+    publication_url: https://doi.org/10.1016/j.gim.2021.11.008
+    published_variants: 888765
+    review: *review
+  - id: LOCAL_HO2022_BC_EUR
+    name: ho2022_bc
+    disease: bc
+    family: PRS-CSx
+    component: EUR
+    role: jointly_estimated_ancestry_component
+    source_type: publication_supplement
+    source_path: outputs/external_pgs/ancestry_component_audit_20261012/EMS140660-supplement-TableS4.xlsx
+    source_sha256: 41b396f07f882fadd0f3a3e7d89ba0a25e80c60208560c12dc07e8a6a91d9c0e
+    weight_url: https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7612481/supplementaryFiles
+    publication_url: https://doi.org/10.1016/j.gim.2021.11.008
+    published_variants: 947621
+    review: *review

@@ -22,6 +22,24 @@ scores with covariates (`sex`, `age_sd`, and ancestry PCs). The resulting
 TabPFN score is then evaluated through the same official logistic validation
 interface as the single-PRS baselines.
 
+## Frozen External PGS Benchmark
+
+The external PGS workflow keeps published SNP weights fixed and evaluates
+ancestry-aware integration using official train patients as the TabPFN context
+and official validation patients for evaluation. Within each model, parameter
+selection and calibration use training patients only. The default model combines all retained PGS with age,
+sex, and PC1–10; soft genetic similarities are optional sensitivity inputs.
+This simpler default was adopted after reviewing the initial validation results.
+The original eight-arm benchmark remains available with `--methods all`. See
+[`docs/external_pgs_benchmark.md`](docs/external_pgs_benchmark.md) for resource
+review, scoring, and the paired validation comparison protocol. The primary
+entry point is `scripts/evaluate_external_pgs_validation.py`.
+
+The [Ho2022 BC expansion and holdout execution note](docs/1012/Ho2022_BC_and_External_PRS_Holdout_20261012_CN.md)
+describes the current 26/7/5 T2D/CAD/BC panel, the OOF-trained wrapper, and
+verification of unlabelled holdout predictions. See also the
+[All of Us / HPC feasibility assessment](docs/1012/All_of_Us_HPC_Feasibility_CN_20261012.md).
+
 ## Pipeline
 
 The workflow has three layers:
