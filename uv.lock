@@ -545,6 +545,8 @@ ablation = [
     { name = "xgboost-cpu", version = "3.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 dev = [
+    { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "matplotlib", version = "3.11.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "mypy" },
     { name = "nbstripout" },
     { name = "pytest" },
@@ -565,6 +567,7 @@ tabpfn = [
 requires-dist = [
     { name = "catboost", marker = "extra == 'prs-benchmark'", specifier = ">=1.2,<2" },
     { name = "h5py", specifier = ">=3.10" },
+    { name = "matplotlib", marker = "extra == 'dev'", specifier = ">=3.9" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "nbstripout", marker = "extra == 'dev'", specifier = ">=0.7" },
     { name = "numpy", specifier = ">=1.24" },
