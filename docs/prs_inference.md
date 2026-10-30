@@ -1,5 +1,8 @@
 # PRS, TabPFN and student inference
 
+For copyable commands, required local files, expected outputs, Slurm execution
+and troubleshooting, see the [中文运行手册](RUNNING_CN.md).
+
 This guide covers the code published on 2026-10-30. The repository contains
 workflow code and aggregate result summaries. Supply trusted local model bundles,
 PRS resources and patient inputs separately. Serialized joblib bundles must come

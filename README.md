@@ -19,6 +19,9 @@ internal-versus-external comparison, and the completed PRS distillation work.
   validation, nested training OOF, and validation-only kinship diagnostics.
 - [Inference guide](docs/prs_inference.md): PRS scoring, TabPFN holdout prediction,
   and saved-student prediction through `scripts/predict_prs_student.py`.
+- [中文运行手册：完整命令与输入输出](docs/RUNNING_CN.md): environment setup,
+  six saved-student examples, PRS scoring, TabPFN preflight/prediction, and
+  distillation training entry points.
 - Student modes distinguish the common interpretable `M0_KD` model from the
   train-selected `BIO_POLICY` (`M0_KD`, `HGB_PAIR_KD`, `G_A6_KD` by disease).
 - Distillation code, configurations, synthetic tests, Slurm launchers and report
