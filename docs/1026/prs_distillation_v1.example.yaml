@@ -1,0 +1,215 @@
+# 研究配置模板。由 Codex 在仓库勘察后填充真实路径、列映射和模型配置。
+# 不是一个已经可对真实数据直接运行的 pipeline；不要把 null 填成猜测值。
+spec_version: "1.0"
+experiment_name: "fixed_prs_prototype_distillation_v1"
+
+scope:
+  phase_a_core: true
+  phase_a_ablations_after_core: true
+  phase_b_official_stage2: false
+  blind_holdout_access: false
+  external_inference_api: false
+  modify_existing_prs_weights: false
+  allow_model_structure_expansion: false
+
+project:
+  repo_root: null
+  output_root: "outputs/prs_distillation_v1"
+  trait: null                  # 单次一个 trait；沿用现有 CAD/T2D/BC 等实际配置
+  existing_config_path: null
+  existing_evaluator_path: null
+  run_id: null                 # 自动生成，包含日期、git commit 与 config hash
+
+data:
+  input_path: null
+  format: "auto"
+  id_column: null
+  label_column: null
+  positive_label: 1
+  split_manifest_path: null
+  split_column: null
+  split_values:
+    training: "official_train"
+    evaluation: "official_validation"
+    blind: "blind_holdout"
+  family_group_column: null    # 若存在，必须使用；否则用 participant ID
+  eligibility_rule: "inherit_existing"
+  age_column: null
+  age_units: null              # 不把 age_sd 错当年龄（年）
+  age_is_standardized: null
+  ancestry_columns: []         # 核对后填入现有 PC1–PC10 或实际连续 ancestry 坐标
+  ancestry_group_column: null  # 仅用于汇报，不自动进入 gate
+  covariate_columns: []        # 复用既有 sex 等；不人为扩展
+  prs_columns: []
+  prs_manifest_path: null
+  strict_same_evaluation_cohort: true
+  missing_policy: "inherit_or_fail"
+  constant_and_duplicate_policy: "audit_deterministic_no_outcome_selection"
+
+preprocessing:
+  prs_policy: "reuse_documented_correction"
+  require_score_provenance: true
+  fit_new_statistics_on_training_scope_only: true
+  no_new_ancestry_residualization: true
+  preserve_existing_genetic_coordinates: true
+  standardize_ancestry_within_fit_scope: true
+  age_basis:
+    implementation: "sklearn.preprocessing.SplineTransformer"
+    n_knots: 3
+    degree: 2
+    knots: "quantile"
+    include_bias: false
+    extrapolation: "constant"
+    center_basis_within_fit_scope: true
+    insufficient_unique_ages: "logged_linear_fallback"
+  reference_age: "fit_scope_median"
+
+splits:
+  preserve_existing_official_splits: true
+  seed: 20261026
+  tuning_fraction: 0.20
+  use_groups_when_available: true
+  stratification: "outcome_with_existing_ancestry_balance_when_feasible"
+  tuning_split_before_teacher_oof: true
+  teacher_oof_folds: 5
+  insufficient_groups_or_classes: "fail_with_report"
+  lock_split_manifest: true
+
+teacher:
+  backend: "local_tabpfn"
+  reuse_existing_config: true
+  model_version: null          # 核对并固定；项目历史为 v3，不默认采用包最新版
+  package_version: null        # 勘察时记录并冻结，不强制升级环境
+  checkpoint_path: null
+  checkpoint_sha256: null
+  n_estimators: null           # 按现有 trait 配置核实，不给全部 trait 一刀切
+  probability_balancing: null  # 继承并记录真实现有设置
+  random_seed: 20261026
+  device: "cuda"
+  same_information_as_student: true
+  soft_target: "positive_class_probability"
+  check_classes_mapping: true
+  concurrent_gpu_jobs: 1
+  use_cached_predictions_only_with_exact_provenance: true
+  context_query_group_overlap: "error"
+  extra_teacher_calibration: false
+  generate_metadata_only_teacher_after_core: false
+
+student:
+  model: "fixed_prs_prototype_softmax_age_scale"
+  learn_new_prototypes: false
+  per_prs_scale_rk: false
+  prototype_mix_vkj: false
+  gate:
+    inputs: "ancestry_only"
+    form: "linear_softmax"
+    temperature: 1.0
+    effective_parameter_gauge: "center_across_prs"
+    entropy_penalty: 0.0
+    top_k: null
+  baseline:
+    form: "intercept_plus_age_basis_plus_linear_ancestry_plus_existing_covariates"
+  scale:
+    form: "exp_intercept_plus_age_basis"
+    learn_intercept: true
+    normalize_reference_age_during_training: false
+    shared_across_prs_and_ancestry: true
+  device: "cpu"
+  dtype: "float64"
+  batch_mode: "full"
+  initialization:
+    baseline_intercept: "logit_training_soft_target_mean"
+    other_baseline_coefficients: 0.0
+    age_scale_value: 0.25
+    age_scale_nonconstant_coefficients: 0.0
+    gate_weight_std: 0.01
+    gate_bias: 0.0
+
+optimization:
+  loss: "BCEWithLogitsLoss"
+  target: "(1-lambda)*y + lambda*q_teacher"
+  distillation_temperature: 1.0
+  class_weight: null
+  pos_weight: null
+  resample_classes: false
+  optimizer: "Adam"
+  learning_rate: 0.01
+  optimizer_weight_decay: 0.0
+  max_epochs: 2000
+  evaluate_every_epochs: 10
+  patience_epochs: 200
+  min_delta: 0.000001
+  gradient_clip_norm: 10.0
+  seeds: [17, 29, 43]
+  final_primary_seed: 17
+  average_models_for_primary: false
+  lambda_grid: [0.0, 0.25, 0.5, 0.75, 1.0]
+  gate_ridge_grid: [0.0001, 0.001, 0.01]
+  baseline_nonintercept_ridge: 0.0001
+  age_scale_nonintercept_ridge: 0.001
+  penalty_reduction: "sum_of_squares"
+  unpenalized_intercepts: ["baseline_intercept", "age_scale_intercept"]
+  pure_kd_selection_metric: "teacher_soft_label_cross_entropy"
+  supervised_and_mixed_selection_metric: "true_label_log_loss"
+  candidate_seed_aggregation: "mean_internal_metric"
+  tie_tolerance: 0.0001
+  tie_break: ["smaller_lambda", "stronger_gate_ridge"]
+  refit_epochs: "median_best_epoch_of_selected_config"
+  numerical_failure_retry:
+    enabled: true
+    maximum_retries: 1
+    learning_rate: 0.003
+    record_original_failure: true
+
+experiments:
+  required: ["META", "S_SUP", "S_KD_PURE", "S_KD_MIX", "T_MATCHED"]
+  positive_mixed_lambdas: [0.25, 0.5, 0.75]
+  selected_policy_may_choose_supervised: true
+  selected_policy_metric: "true_label_log_loss"
+  ablations_after_core: ["S_STATIC_GATE", "S_CONSTANT_SCALE"]
+  ablation_hyperparameters: "locked_selected_mixed_config"
+
+metrics:
+  report_split: "official_validation"
+  label_direct_results_diagnostic_not_historical_official: true
+  predictive: ["log_loss", "auroc", "brier", "calibration_intercept", "calibration_slope"]
+  fidelity: ["probability_mae", "probability_rmse", "bernoulli_kl", "logit_r2"]
+  probability_epsilon_for_metrics: 0.000001
+  bootstrap:
+    replicates: 1000
+    paired: true
+    unit: "family_group_if_available_else_participant"
+    refit_models: false
+    seed: 20261027
+  subgroups:
+    ancestry: "existing_labels_only"
+    age_bins: "training_age_quartiles"
+    reliable_summary_min_total: 100
+    reliable_summary_min_events: 20
+    reliable_summary_min_nonevents: 20
+    small_group_action: "show_counts_and_unstable_flag"
+  conditional_parameter_bootstrap:
+    enabled: false
+    replicates: 50
+    freeze_teacher_and_preprocessing: true
+
+stage2_compatibility:
+  enabled: false
+  require_existing_evaluator: true
+  require_nested_student_teacher_oof: true
+  tune_hyperparameters_within_outer_training_scope: true
+  score_representation: "inherit_verified_existing"
+  covariates: "inherit_verified_existing"
+  logistic_weighting: "inherit_verified_existing_unweighted"
+  official_metrics: ["auroc", "or90", "nagelkerke_r2"]
+  never_compare_direct_student_to_stage2_teacher: true
+  keep_direct_explanations_separate: true
+
+outputs:
+  export_patient_level_components_locally: true
+  write_patient_ids_to_public_reports: false
+  gitignore_data_caches_predictions: true
+  save_full_student_bundle: true
+  save_resolved_environment: true
+  save_cache_scope_manifest: true
+  save_selection_lock: true

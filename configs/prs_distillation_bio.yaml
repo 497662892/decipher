@@ -1,0 +1,38 @@
+schema_version: 1
+source_run: outputs/prs_distillation_v1/phase_a_fulltrain_20261026_3d4334d2_0161ad36d950
+v3_run: outputs/prs_distillation_v3/signaware_20261026_95dfc04c8c06
+output_root: outputs/prs_distillation_bio
+traits: [T2D, cad, bc]
+seeds: [17, 29, 43]
+primary_seed: 17
+families:
+  M0: {shape: false, age_segments: 3}
+  A6: {shape: false, age_segments: 6}
+  G: {shape: true, age_segments: 3}
+  G_A6: {shape: true, age_segments: 6}
+lambdas: [0, 0.25, 0.5, 0.75, 1]
+kappas_r: [0.0001, 0.001, 0.01]
+shape_penalty: 0.001
+interaction_parents: [M0, G_A6]
+interactions:
+  CONTINUE: {variant: M0, d_only: false}
+  D1: {variant: M1, d_only: false}
+  D2: {variant: M2, d_only: false}
+  D2_ONLY: {variant: M2, d_only: true}
+kappas_d: [0.0001, 0.001, 0.01]
+baseline_ridge: 0.0001
+initial_learning_rate: 0.01
+interaction_learning_rate: 0.001
+max_steps: 2000
+patience: 200
+evaluate_every: 10
+selection_tolerance: 0.0001
+selection_metric: H_true_label_log_loss_mean_3_seeds
+selection_rule: within_tolerance_prefer_fewer_parameters_then_lower_lambda_then_stronger_regularization
+refit_steps: median_H_best_step
+age_units: age_sd
+age_unit: 1
+primary_metric: log_loss
+bootstrap_replicates: 1000
+bootstrap_seed: 20261028
+phase_b: false

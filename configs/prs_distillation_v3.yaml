@@ -1,0 +1,35 @@
+schema_version: 3
+source_run: outputs/prs_distillation_v1/phase_a_fulltrain_20261026_3d4334d2_0161ad36d950
+matched_logistic_run: outputs/prs_distillation_v1/joint_logistic_comparison_fulltrain_20261026
+specification: docs/1026/PRS_Distillation_v3_SignAware_Compact.md
+output_root: outputs/prs_distillation_v3
+traits: [T2D, cad, bc]
+variants: [M0, M1, M2]
+supervision: [SUP, KD]
+seeds: [17, 29, 43]
+primary_seed: 17
+kappas: [0.0001, 0.001, 0.01]
+age_units: provided_age_sd
+age_unit: 1.0
+age_quantiles: [0, 0.3333333333333333, 0.6666666666666666, 1]
+# Common frozen gate penalty within each disease isolates the KD target.
+gate_ridge_policy: source_mixed_lock_common_to_sup_and_kd
+lambda_policy: source_mixed_lock_for_kd_and_zero_for_sup
+baseline_ridge: 0.0001
+selection_metric: H_true_label_log_loss
+selection_tolerance: 0.0001
+tie_break: stronger_kappa_then_simpler_structure
+max_steps: 2000
+evaluate_every: 10
+patience: 200
+min_delta: 0.000001
+learning_rate: 0.01
+retry_learning_rate: 0.003
+gradient_clip: 10.0
+# Every arm has 3 kappa values x 3 seeds; M1/M2 also require their M0 warm fit.
+warm_start: same_scope_same_lambda_kappa_seed_M0
+refit_steps: median_H_best_step_per_selected_candidate
+bootstrap_replicates: 1000
+bootstrap_seed: 20261027
+primary_comparison_metric: log_loss
+phase_b: false

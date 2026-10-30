@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="@@LANG@@">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@@TITLE@@</title>
+<style>
+:root{--ink:#172b44;--muted:#607187;--teal:#087f70;--line:#dbe4ed;--paper:#fff;--bg:#f2f6fa}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif}
+a{color:#096b67;text-underline-offset:3px}header{background:#172b44;color:#fff;padding:54px max(28px,calc((100vw - 1160px)/2)) 44px}header .eyebrow{color:#99d9ce;letter-spacing:.12em;font-size:12px;font-weight:700}h1{font-size:clamp(28px,4vw,44px);line-height:1.2;margin:16px 0 20px;max-width:1050px}header p{max-width:940px;color:#dce6ef;font-size:18px;margin:0 0 22px}.badges{display:flex;flex-wrap:wrap;gap:9px}.badge{padding:5px 12px;border:1px solid #486275;border-radius:5px;font-size:12px;color:#dce6ef}
+nav{position:sticky;top:0;z-index:10;background:#fffffff5;border-bottom:1px solid var(--line);padding:12px 24px;display:flex;gap:22px;align-items:center;justify-content:center;flex-wrap:wrap;backdrop-filter:blur(8px)}nav a{font-size:13px;font-weight:650;text-decoration:none}nav .language{margin-left:16px;border-left:1px solid var(--line);padding-left:20px}main{max-width:1210px;margin:0 auto;padding:24px}section{scroll-margin-top:95px;background:var(--paper);border:1px solid var(--line);border-radius:12px;margin:22px 0;padding:34px 38px}h2{font-size:28px;line-height:1.3;margin:4px 0 18px}h3{font-size:20px;margin:24px 0 10px}.kicker{font-size:12px;color:var(--teal);letter-spacing:.10em;font-weight:750}.lead{font-size:18px;max-width:960px}.muted,figcaption{color:var(--muted);font-size:13px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.card{border:1px solid var(--line);border-radius:9px;padding:20px;background:#fbfcfe}.card h3{margin:0 0 12px;font-size:18px}.card p{margin:0}.stat{font-size:30px;font-weight:700;color:var(--teal);line-height:1.3}.stat small{font-size:13px;font-weight:400;color:var(--muted)}.note{background:#eef8f5;border-left:4px solid var(--teal);border-radius:3px;padding:16px 20px;margin:22px 0}.note.amber{background:#fff7e9;border-left-color:#c78926}.equation{padding:12px 0;overflow-x:auto}.equation img{height:auto;max-width:100%;display:block;max-height:100px}.equation.main img{max-height:115px}.formula-caption{font-size:14px;color:var(--muted);margin:0 0 16px}.figure{margin:24px -10px 14px}.figure img{display:block;width:100%;height:auto;border-radius:7px;border:1px solid #e7edf3}.figure figcaption{padding:12px 12px 0}.controls{display:flex;align-items:end;gap:18px;flex-wrap:wrap;margin:20px 0}.controls label{display:flex;flex-direction:column;font-size:12px;font-weight:650;gap:6px}select,button{font:inherit;font-size:14px;border:1px solid #b7c7d5;border-radius:6px;background:white;color:var(--ink);padding:9px 13px;cursor:pointer}select:focus,button:focus,a:focus{outline:3px solid #76caba;outline-offset:3px}.controls select{min-width:175px}#explorer-chart{width:100%;height:auto;min-height:220px}#metric-description{min-height:55px}.table-wrap{overflow-x:auto;margin:18px 0}table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}th,td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--line);vertical-align:top}th{background:#edf3f8;font-size:12px;letter-spacing:.02em;white-space:nowrap}tr.primary td{background:#eef8f5}td.number{text-align:right;white-space:nowrap}.dot{width:10px;height:10px;display:inline-block;border-radius:50%;margin-right:8px}details{border:1px solid var(--line);border-radius:7px;padding:13px 18px;margin:18px 0}summary{cursor:pointer;font-weight:650}details p,details li{font-size:14px}ul{padding-left:22px}li{margin:8px 0}.finding{border-top:1px solid var(--line);padding:17px 0;display:grid;grid-template-columns:125px 1fr;gap:18px}.finding strong{color:var(--teal)}code{font-family:ui-monospace,Consolas,monospace;font-size:.88em;background:#eef2f6;padding:2px 5px;border-radius:3px;overflow-wrap:anywhere}.sources{font-size:13px}footer{padding:20px 30px 45px;text-align:center;color:var(--muted);font-size:12px}.screen-reader{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
+@media(max-width:760px){main{padding:9px}section{padding:25px 18px;border-radius:8px}header{padding:32px 23px}nav{gap:12px;padding:9px;position:relative}.grid,.grid.two{grid-template-columns:1fr}h2{font-size:24px}.finding{grid-template-columns:1fr;gap:2px}.controls{gap:12px}.controls label{width:100%}.figure{margin-left:-10px;margin-right:-10px}table{font-size:12px}th,td{padding:9px}}
+@media print{nav,.controls,button{display:none}header{background:white;color:var(--ink);padding:20px}header p,header .eyebrow,.badge{color:var(--ink)}body{background:white}main{max-width:none;padding:0}section{border:0;border-radius:0;padding:16px;break-before:page}.figure{break-inside:avoid}details{display:block}.grid{break-inside:avoid}h2,h3{break-after:avoid}}
+</style>
+</head>
+<body>
+@@BODY@@
+<script type="application/json" id="report-data">@@DATA@@</script>
+<script>
+'use strict';
+const data=JSON.parse(document.getElementById('report-data').textContent);
+const ui=@@UI@@;
+const traitSelect=document.getElementById('trait-select');
+const metricSelect=document.getElementById('metric-select');
+const referenceSelect=document.getElementById('reference-select');
+function findEffect(trait,arm,reference,metric){
+ const direct=data.effects.find(r=>r.trait===trait&&r.arm===arm&&r.reference===reference&&r.metric===metric);
+ if(direct)return direct;
+ const reverse=data.effects.find(r=>r.trait===trait&&r.arm===reference&&r.reference===arm&&r.metric===metric);
+ return reverse?{delta:-reverse.delta,ci_low:-reverse.ci_high,ci_high:-reverse.ci_low}:null;
+}
+function fmt(x,signed=false){return(signed&&x>0?'+':'')+Number(x).toFixed(4)}
+function renderExplorer(){
+ const trait=traitSelect.value,metric=metricSelect.value,reference=referenceSelect.value;
+ const rows=data.metrics.filter(r=>r.trait===trait);
+ const ref=rows.find(r=>r.arm===reference);
+ const cohort=data.cohorts.find(r=>r.trait===trait);
+ document.getElementById('metric-description').textContent=ui.descriptions[metric];
+ document.getElementById('explorer-cohort').textContent=`${ui.traits[trait]} · n=${cohort.val_n.toLocaleString()} · ${ui.events}: ${cohort.val_events} (${(cohort.val_prevalence*100).toFixed(1)}%)`;
+ const values=rows.map(r=>r[metric]);
+ let min=Math.min(...values),max=Math.max(...values);
+ if(metric==='nagelkerke_r2'){min=Math.min(...rows.map(r=>r.nagelkerke_ci_low));max=Math.max(...rows.map(r=>r.nagelkerke_ci_high))}
+ if(metric==='average_precision')min=Math.min(min,cohort.val_prevalence);
+ const span=Math.max(max-min,.025),lo=min-span*.15,hi=max+span*.38;
+ const x=v=>235+(v-lo)/(hi-lo)*625;
+ let svg=`<svg viewBox="0 0 960 330" role="img" aria-label="${ui.chartLabel}"><rect width="960" height="330" fill="#fff"/>`;
+ for(let i=0;i<5;i++){const v=lo+(hi-lo)*i/4;svg+=`<line x1="${x(v)}" y1="25" x2="${x(v)}" y2="274" stroke="#e4ebf2"/><text x="${x(v)}" y="301" text-anchor="middle" fill="#607187" font-size="12">${v.toFixed(3)}</text>`}
+ if(metric==='average_precision')svg+=`<line x1="${x(cohort.val_prevalence)}" y1="25" x2="${x(cohort.val_prevalence)}" y2="274" stroke="#607187" stroke-dasharray="5 5"/>`;
+ rows.forEach((r,i)=>{const y=50+i*49,col=ui.colors[r.arm];
+  svg+=`<text x="213" y="${y+5}" text-anchor="end" fill="#172b44" font-size="15">${ui.names[r.arm]}</text>`;
+  if(metric==='nagelkerke_r2')svg+=`<line x1="${x(r.nagelkerke_ci_low)}" y1="${y}" x2="${x(r.nagelkerke_ci_high)}" y2="${y}" stroke="${col}" stroke-width="2"/>`;
+  svg+=`<circle cx="${x(r[metric])}" cy="${y}" r="6" fill="${col}"><title>${ui.names[r.arm]}: ${fmt(r[metric])}</title></circle><text x="${x(r[metric])+12}" y="${y+5}" fill="${col}" font-size="14" font-weight="600">${fmt(r[metric])}</text>`;
+ });
+ svg+=`<text x="547" y="326" text-anchor="middle" fill="#607187" font-size="13">${ui.metrics[metric]}</text></svg>`;
+ document.getElementById('explorer-chart').innerHTML=svg;
+ document.getElementById('explorer-table').innerHTML=`<thead><tr><th>${ui.method}</th><th>${ui.metrics[metric]}</th><th>Δ vs ${ui.names[reference]}</th><th>${ui.interval}</th></tr></thead><tbody>`+rows.map(r=>{
+  const ef=findEffect(trait,r.arm,reference,metric);
+  return `<tr class="${r.arm==='S_KD_MIX'?'primary':''}"><td><span class="dot" style="background:${ui.colors[r.arm]}"></span>${ui.names[r.arm]}</td><td class="number">${fmt(r[metric])}</td><td class="number">${r.arm===reference?'—':fmt(r[metric]-ref[metric],true)}</td><td class="number">${ef?'['+fmt(ef.ci_low,true)+', '+fmt(ef.ci_high,true)+']':'—'}</td></tr>`;
+ }).join('')+'</tbody>';
+}
+[traitSelect,metricSelect,referenceSelect].forEach(el=>el.addEventListener('change',renderExplorer));
+renderExplorer();
+</script>
+</body>
+</html>

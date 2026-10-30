@@ -1,0 +1,111 @@
+{
+  "publication_date": "2026-10-30",
+  "status": "source_and_inference_verified",
+  "source_receipts": [
+    {
+      "path": "outputs/prs_distillation_bio/summary_20261027/VERIFIED.json",
+      "sha256": "efc591b6707fb18087bf979c169959d0aa67a9e00cf06fdcf90117b352804289",
+      "hash_entries_checked": 79,
+      "mismatches": 0
+    },
+    {
+      "path": "outputs/prs_distillation_bio/methods_20261027/VERIFIED.json",
+      "sha256": "e3fd968fff75ef8416442b1b289929938a31d9383d3600b618fbea39b93ea868",
+      "hash_entries_checked": 79,
+      "mismatches": 0
+    },
+    {
+      "path": "outputs/prs_distillation_bio/exploration_20261026_3569648f99a8/COMPLETE.json",
+      "sha256": "ce6149496ac577eb83ca1305a776042390a7fc848b7ab43a1766fb843683ce6f",
+      "hash_entries_checked": 224,
+      "mismatches": 0
+    }
+  ],
+  "frozen_panel_comparison": {
+    "receipt": "outputs/external_pgs/frozen_internal_external_trainval_20261013/report/VERIFIED.json",
+    "sha256": "61217a84d1b6d1351e2b78e0aa9fbe9dcf84fc88f987bdb176bf21534d02e99d",
+    "hash_entries_checked": 38,
+    "mismatches": 0
+  },
+  "aggregate_sources": {
+    "outputs/prs_distillation_bio/summary_20261027/main_metrics.csv": "c4b518dba3f16524d656aba39a1abdf46d54fa4147f5bf7ff5db3b9bb973ccac",
+    "outputs/prs_distillation_bio/methods_20261027/metrics.csv": "667c2124f2baa94c379c52afafbef6f0a739005a6a4f5f6f25c4d45b71da235d",
+    "outputs/external_pgs/frozen_internal_external_trainval_20261013/report/overall_metrics.csv": "aca8e683a1d46312a1953749b44b7eeb3a26e79429d4b9fdc36b035b8c4693f5",
+    "outputs/prs_distillation_bio/exploration_20261026_3569648f99a8/report/val/POLICY_LOCK.json": "0b0ae8f6dfb32b4066b6f028bfe2053ad529a5e674aa960731aeedbbb9bc49ec"
+  },
+  "student_replay": [
+    {
+      "trait": "T2D",
+      "requested_arm": "M0_KD",
+      "resolved_arm": "M0_KD",
+      "n": 2852,
+      "max_abs_probability_difference": 0.0,
+      "new_fits": 0
+    },
+    {
+      "trait": "T2D",
+      "requested_arm": "BIO_POLICY",
+      "resolved_arm": "M0_KD",
+      "n": 2852,
+      "max_abs_probability_difference": 0.0,
+      "new_fits": 0
+    },
+    {
+      "trait": "cad",
+      "requested_arm": "M0_KD",
+      "resolved_arm": "M0_KD",
+      "n": 2852,
+      "max_abs_probability_difference": 0.0,
+      "new_fits": 0
+    },
+    {
+      "trait": "cad",
+      "requested_arm": "BIO_POLICY",
+      "resolved_arm": "HGB_PAIR_KD",
+      "n": 2852,
+      "max_abs_probability_difference": 0.0,
+      "new_fits": 0
+    },
+    {
+      "trait": "bc",
+      "requested_arm": "M0_KD",
+      "resolved_arm": "M0_KD",
+      "n": 1628,
+      "max_abs_probability_difference": 0.0,
+      "new_fits": 0
+    },
+    {
+      "trait": "bc",
+      "requested_arm": "BIO_POLICY",
+      "resolved_arm": "G_A6_KD",
+      "n": 1628,
+      "max_abs_probability_difference": 0.0,
+      "new_fits": 0
+    }
+  ],
+  "patient_records_published": false,
+  "model_weights_published": false,
+  "new_training_fits": 0,
+  "engineering_checks": {
+    "pytest": {
+      "passed": 285,
+      "skipped": 4,
+      "failed": 0,
+      "command": "uv run --extra dev pytest -ra",
+      "environment": "Existing uv environment; UV_NO_SYNC=1, UV_OFFLINE=1; OMP/BLAS threads limited to 1",
+      "log_sha256": "6f45b936786c8a736b6af2e4f9b5408a92e3dcf58be3d9d71f77c4e75f8f91b4",
+      "skip_reasons": [
+        "One opt-in upstream R integration test",
+        "One opt-in real PLINK2/PGS integration test",
+        "Two workbook tests require optional openpyxl, absent in this environment"
+      ]
+    },
+    "ruff": "uv run --extra dev ruff check .: passed",
+    "lockfile": "uv lock --check --offline: passed, 123 packages; existing package versions unchanged",
+    "slurm": "14 added launchers passed bash -n",
+    "documentation_links": {
+      "checked": 18,
+      "missing": 0
+    }
+  }
+}

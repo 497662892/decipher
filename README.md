@@ -9,6 +9,22 @@ domain-heavy work; this code handles validation, sample sets, command
 generation, score collection, metric aggregation, ensemble inputs, and
 submission formatting.
 
+## Current release — 2026-10-30
+
+The latest release includes the external PRS panels (26 T2D / 7 CAD / 5 female
+BC scores), TabPFN integration and standardized-logit export, the frozen
+internal-versus-external comparison, and the completed PRS distillation work.
+
+- [Latest results and verification](docs/1030/LATEST_RESULTS.md): original
+  validation, nested training OOF, and validation-only kinship diagnostics.
+- [Inference guide](docs/prs_inference.md): PRS scoring, TabPFN holdout prediction,
+  and saved-student prediction through `scripts/predict_prs_student.py`.
+- Student modes distinguish the common interpretable `M0_KD` model from the
+  train-selected `BIO_POLICY` (`M0_KD`, `HGB_PAIR_KD`, `G_A6_KD` by disease).
+- Distillation code, configurations, synthetic tests, Slurm launchers and report
+  generators are included. Fitted bundles, checkpoints and patient-level outputs
+  must be supplied locally; cloning the repository does not provide trained models.
+
 Private competition data, genotype files, phenotype files, summary statistics,
 model outputs, and submissions are not included. Keep them in ignored local
 folders such as `data/`, `outputs/`, `models/`, and `submissions/`.
@@ -66,7 +82,11 @@ The workflow has three layers:
    - When using cross-validation, use one shared patient-level 5-fold split for
      fair method comparison.
 
-## Validation Summary
+## Historical Internal-PRS Validation Summary
+
+This section records the earlier internal-PRS workflow. The newer external-PRS
+and student results use different cohorts and output scales; see the
+[current results](docs/1030/LATEST_RESULTS.md) for those comparisons.
 
 Primary metric: `OR90`, the odds ratio comparing the top 10% of scores against
 the lower 90%. AUC is included as a familiar diagnostic.
@@ -153,7 +173,7 @@ The final selected setting was not simply "use every PRS". Disease-specific
 input dropping was used to choose the final PRS families, then the selected
 input set was carried into the final scoring pipeline.
 
-## Final Model
+## Historical Internal-PRS Final Model
 
 The final selected approach was a disease-specific TabPFN-3 ensemble using
 selected PRS inputs plus covariates as model input features. The covariates are

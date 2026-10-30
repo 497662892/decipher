@@ -1,0 +1,36 @@
+# User-requested full original train sensitivity, retaining original train/val membership.
+# Historical external Teacher preprocessing and seed are restored; no blind data are used.
+schema_version: 1
+output_root: outputs/prs_distillation_v1
+run_name: phase_a_fulltrain_20261026
+traits: [T2D, cad, bc]
+cohort_policy: original_full_sensitivity
+allow_standardized_age: true
+train_path: data/processed/phenotype.csv
+evaluation_path: data/processed/official_validation_phenotype.csv
+panel_selection: outputs/external_pgs/holdout_wrapper_20261012/SELECTION.json
+ancestry_path: outputs/final_ancestry_1000g/combined/target_1000G_hard_labels_pc10_margin0.5.train_val.tsv
+qc_prepared: outputs/internal_prs/nyu_20261011/prepared
+checkpoint: outputs/tabpfn-model-cache/tabpfn-v3-classifier-v3_default.ckpt
+teacher_package: 8.0.1
+teacher_estimators: 16
+teacher_device: cuda
+teacher_preprocessing: historical_external
+split_seed: 20261026
+teacher_seed: 42
+bootstrap_seed: 20261027
+bootstrap_replicates: 1000
+optimization:
+  max_epochs: 2000
+  evaluate_every: 10
+  patience: 200
+  min_delta: 0.000001
+  learning_rate: 0.01
+  retry_learning_rate: 0.003
+  gradient_clip: 10.0
+  seeds: [17, 29, 43]
+  lambdas: [0, 0.25, 0.5, 0.75, 1]
+  gate_ridges: [0.0001, 0.001, 0.01]
+  baseline_ridge: 0.0001
+  scale_ridge: 0.001
+  tie_tolerance: 0.0001

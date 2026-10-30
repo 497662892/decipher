@@ -549,6 +549,8 @@ dev = [
     { name = "nbstripout" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
+    { name = "torch", version = "2.9.1+cu129", source = { registry = "https://download.pytorch.org/whl/cu129" }, marker = "sys_platform == 'linux'" },
 ]
 prs-benchmark = [
     { name = "catboost" },
@@ -576,7 +578,9 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.10" },
     { name = "statsmodels", specifier = ">=0.14" },
     { name = "tabpfn", marker = "extra == 'tabpfn'", specifier = ">=8,<9" },
+    { name = "torch", marker = "sys_platform == 'linux' and extra == 'dev'", specifier = "==2.9.1", index = "https://download.pytorch.org/whl/cu129" },
     { name = "torch", marker = "sys_platform == 'linux' and extra == 'tabpfn'", specifier = "==2.9.1", index = "https://download.pytorch.org/whl/cu129" },
+    { name = "torch", marker = "sys_platform != 'linux' and extra == 'dev'", specifier = "==2.9.1" },
     { name = "torch", marker = "sys_platform != 'linux' and extra == 'tabpfn'", specifier = "==2.9.1" },
     { name = "typer", specifier = ">=0.12" },
     { name = "xgboost-cpu", marker = "extra == 'ablation'", specifier = ">=3,<4" },
