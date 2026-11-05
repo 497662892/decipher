@@ -9,9 +9,41 @@ domain-heavy work; this code handles validation, sample sets, command
 generation, score collection, metric aggregation, ensemble inputs, and
 submission formatting.
 
-## Current release — 2026-10-30
+## External-cohort inference — 2026-11-05
 
-The latest release includes the external PRS panels (26 T2D / 7 CAD / 5 female
+The new entry point prepares the exact frozen 26/7/5 raw PRS panels and standard
+1000G reference PCs, then runs TabPFN v3 and saved distilled students. Default:
+train + validation refit, M0_KD student, no OADP. Train-only models are also
+available when the private bundle includes both scopes.
+
+After obtaining the private bundle and installing PLINK2, edit one cohort YAML:
+
+```bash
+cd /path/to/bundle/runtime
+uv sync --frozen --extra tabpfn
+cp configs/external_cohort.example.yaml cohort.yaml
+# Set bundle, run_dir, genotype files, covariates and runtime.plink2.
+uv run --frozen --extra tabpfn python scripts/external_inference.py run --config cohort.yaml
+```
+
+With the default `age.mode: deferred`, this completes and caches PRS/PC preparation.
+Prediction awaits values compatible with the original supplied `age_sd`; raw years
+or target-cohort age z-scores must not be substituted. The original conversion is
+deliberately unresolved. Once compatible age is supplied, rerun the same command.
+
+- [English handbook](docs/EXTERNAL_INFERENCE.md): export, inputs, configuration,
+  CPU/GPU inference, coverage, recovery, outputs and separate label evaluation.
+- [中文操作手册](docs/EXTERNAL_INFERENCE_CN.md).
+- [All of Us VDS adapter and workspace instructions](docs/EXTERNAL_ALLOFUS.md).
+- [Cohort configuration](configs/external_cohort.example.yaml).
+
+The bundle contains private training features/labels needed by TabPFN, in addition
+to model weights. It is not included in this repository. Local replay verifies
+the implementation; actual external performance requires a separate labeled cohort.
+
+## Historical release — 2026-10-30
+
+The October release includes the external PRS panels (26 T2D / 7 CAD / 5 female
 BC scores), TabPFN integration and standardized-logit export, the frozen
 internal-versus-external comparison, and the completed PRS distillation work.
 

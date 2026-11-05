@@ -1,0 +1,7 @@
+# Maintainer-only export inputs. The exported bundle has no dependency on these paths.
+schema_version: 1
+agreement_run: ../outputs/ancestry_holdout_agreement_20261105
+train_baseline: ../outputs/ancestry_transfer_20261104
+scoring_receipt: ../outputs/external_pgs/holdout_wrapper_20261012/scoring/VERIFIED.json
+pc_selection: ../outputs/ancestry_transfer_20261104/FINAL_PC_SELECTION.json
+eligibility: disease_eligibility.yaml

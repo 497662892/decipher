@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>祖源坐标与 PRS 蒸馏 · decipEHR</title>
+  <style>@@STYLE@@</style>
+</head>
+<body>
+<a class="skip-link" href="#analysis">跳转至分析</a>
+<header class="masthead">
+  <div class="brand"><span class="brand-mark" aria-hidden="true"></span> decipEHR <span class="brand-divider">/</span> RESEARCH NOTE</div>
+  <div class="edition">分析封存 · 2026.11.04</div>
+</header>
+<main>
+  <section class="intro" aria-labelledby="title">
+    <div class="eyebrow">ANCESTRY COORDINATES &amp; PRS DISTILLATION</div>
+    <h1 id="title">祖源坐标与 PRS 蒸馏</h1>
+    <p class="lead">更换祖源 PC 后，TabPFN v3 与学生的性能如何变化？<br>蒸馏学生相对单一最佳 PRS 的收益有多大？</p>
+    <p class="scope"><span class="scope-dot" aria-hidden="true"></span> decipEHR 开发分析 <span>·</span> 3 个疾病 / 6 个模型 / 2 套 PC <span>·</span> 尚未进行 All of Us 外部验证</p>
+  </section>
+  <nav class="section-nav" aria-label="报告章节">
+    <a href="#analysis">主要结果</a><a href="#teacher-results">TabPFN v3</a><a href="#pc-effect">PC 更换</a><a href="#baseline-effect">对比 LR</a><a href="#details">详细结果</a><a href="#methods">方法与边界</a>
+  </nav>
+  <section id="analysis" aria-labelledby="analysis-title">
+    <div class="analysis-heading"><div><div class="eyebrow">RESULTS EXPLORER</div><h2 id="analysis-title">比较视角</h2></div><span class="muted">同一队列内，所有模型使用相同患者</span></div>
+    <div class="controls">
+      <label for="cohort">评估人群<select id="cohort"><option value="original_val">原开发验证集</option><option value="nested_oof">训练集 · 嵌套 OOF</option><option value="exclude_shared_group">验证集 · 排除共享亲缘组</option><option value="exclude_direct_0177">验证集 · 排除直接近亲</option></select></label>
+      <label for="metric">性能指标<select id="metric"><option value="auroc">AUROC · 越高越好</option><option value="log_loss">Log loss · 越低越好</option><option value="brier">Brier score · 越低越好</option><option value="nagelkerke_r2">Nagelkerke R² · 越高越好</option></select></label>
+      <div class="metric-help" id="metric-help"></div>
+    </div>
+    <p id="cohort-note" class="context-note" aria-live="polite"></p>
+    <section id="teacher-results" class="model-summary" aria-labelledby="teacher-heading">
+      <div class="summary-heading"><h3 id="teacher-heading">TabPFN v3 教师 <span>官方 PC → 统一参考 PC</span></h3><span class="muted">绝对性能与配对变化</span></div>
+      <div id="teacher-cards" class="cards teacher-cards" aria-live="polite"></div>
+      <p class="reading-note">展示新参考 PC 下重新拟合的教师性能；随上方人群与指标切换。Δ = 参考 PC − 官方 PC，置信区间针对配对差值。</p>
+    </section>
+    <section class="model-summary" aria-labelledby="student-heading">
+      <div class="summary-heading"><h3 id="student-heading">M0 蒸馏学生 <span>官方 PC → 统一参考 PC</span></h3><span class="muted">与教师共享同一评估人群</span></div>
+      <div id="summary-cards" class="cards" aria-live="polite"></div>
+    </section>
+    <p class="reading-note">区间跨过 0 表示差异方向尚不确定，不能据此认定两种设置等效。所有差值均保留原始指标方向。</p>
+  </section>
+  <section id="pc-effect" class="figure-section" aria-labelledby="transfer-title">
+    <div class="section-heading"><div class="section-index">01</div><div><h2 id="transfer-title">更换 PC，是否改变模型表现？</h2><p>比较同一模型的两套 PC 输入；深蓝圆点为 TabPFN v3 教师，青色菱形为 M0 蒸馏学生。</p></div></div>
+    <div class="figure-toolbar"><span class="figure-context" id="transfer-context"></span><div class="download-actions"><a id="transfer-pdf" class="text-button" download>下载 PDF ↗</a><button id="transfer-csv" class="text-button" type="button">数据 CSV ↓</button></div></div>
+    <figure><div class="plot-scroll" tabindex="0" role="region" aria-label="PC 更换效应森林图，可横向滚动"><img id="transfer-plot" class="forest" width="1330" height="365" alt=""></div><figcaption><span class="dot-legend" aria-hidden="true">● ━</span> 点为配对差值，横线为 95% CI；虚线为零差异。三个疾病共用横轴尺度。</figcaption></figure>
+    <details class="compact-details"><summary>查看精确数值与区间 <span>18 个比较</span></summary><div class="table-scroll"><table id="transfer-table"><caption>PC 更换效应；与上图及当前筛选条件一致</caption><thead><tr><th scope="col">疾病</th><th scope="col">模型</th><th scope="col">官方 PC</th><th scope="col">参考 PC</th><th scope="col">Δ [95% CI]</th></tr></thead><tbody></tbody></table></div></details>
+    <p class="figure-note">Single-best LR 在两套 PC 下分别于训练内选 PRS，因此其差值还可能包含 PRS 选择变化；其余模型使用固定 PRS 输入。</p>
+  </section>
+  <section id="baseline-effect" class="figure-section" aria-labelledby="baseline-title">
+    <div class="section-heading"><div class="section-index">02</div><div><h2 id="baseline-title">相对 single-best LR，收益有多大？</h2><p>在同一套 PC 下，比较主要学生、训练内选定学生与 TabPFN v3 教师。</p></div></div>
+    <div class="figure-toolbar"><label class="inline-label" for="baseline-mode">PC 输入<select id="baseline-mode"><option value="reference_pc">统一参考 PC</option><option value="official_pc">官方 PC</option></select></label><div class="download-actions"><a id="baseline-pdf" class="text-button" download>下载 PDF ↗</a><button id="baseline-csv" class="text-button" type="button">数据 CSV ↓</button></div></div>
+    <p class="figure-context baseline-context" id="baseline-context"></p>
+    <figure><div class="plot-scroll" tabindex="0" role="region" aria-label="相对 single-best LR 的森林图，可横向滚动"><img id="baseline-plot" class="forest" width="1330" height="340" alt=""></div><figcaption>Δ = 模型 − single-best LR。参照模型为单一 PRS + 线性年龄 + 性别 + 10 个 PCs 的无惩罚逻辑回归。</figcaption></figure>
+    <details class="compact-details"><summary>查看精确数值与区间 <span>9 个比较</span></summary><div class="table-scroll"><table id="baseline-table"><caption>相对 single-best LR 的差值；与上图及当前筛选条件一致</caption><thead><tr><th scope="col">疾病</th><th scope="col">模型</th><th scope="col">模型值</th><th scope="col">LR 值</th><th scope="col">Δ [95% CI]</th></tr></thead><tbody></tbody></table></div></details>
+    <p class="figure-note">Selected student 为此前冻结的跨模型家族选择策略。全训练选择：T2D = M0_KD、CAD = HGB_PAIR_KD、BC = G_A6_KD；嵌套 OOF 使用各外层训练折的原有选择。</p>
+  </section>
+  <aside class="inference-note"><strong>如何阅读这些区间</strong><p>95% CI 来自已封存的 1,000 次配对亲缘组 bootstrap，条件于已拟合模型，未在重采样内重训，也未作多重比较校正。用于描述效应大小和不确定性，不支持等效性或普遍优越性的结论。</p></aside>
+  <section id="details" class="support-section" aria-labelledby="details-title">
+    <div class="eyebrow">SUPPLEMENTARY RESULTS</div><h2 id="details-title">按需展开，追溯每个比较</h2>
+    <details id="point-details"><summary>全部模型的点估计 <span>随上方人群与指标切换</span></summary><div class="detail-body"><div class="table-scroll"><table id="point-table"><caption id="point-caption"></caption><thead><tr><th scope="col">疾病</th><th scope="col">模型</th><th scope="col">官方 PC</th><th scope="col">参考 PC</th><th scope="col">Δ 参考 − 官方</th></tr></thead><tbody></tbody></table></div><p class="small">各模型绝对指标未提供独立 CI；配对差值的 CI 见上方森林图。完整导出含 AUPRC 与校准诊断。</p><button type="button" class="text-button" data-export="metrics">全部点估计 CSV ↓</button></div></details>
+    <details id="subgroup-details"><summary>固定遗传相似性分层 <span>仅原开发验证集 · AUROC</span></summary><div class="detail-body"><p class="small">沿用既有 1000G 相似性标签，两套 PC 使用相同分组；这是描述性分析，不是 All of Us 人群表现。本节独立于上方筛选。</p><label class="inline-label" for="subgroup-trait">疾病<select id="subgroup-trait"><option value="T2D">T2D · 2 型糖尿病</option><option value="cad">CAD · 冠心病</option><option value="bc">BC · 女性乳腺癌</option></select></label><div class="table-scroll"><table id="subgroup-table"><caption>M0 蒸馏学生；原开发验证集 AUROC</caption><thead><tr><th scope="col">固定分层</th><th scope="col">人数 / 病例</th><th scope="col">官方 PC</th><th scope="col">参考 PC</th><th scope="col">精度提示</th></tr></thead><tbody></tbody></table></div><p class="small">总人数 &lt; 100 或病例 / 对照任一 &lt; 20 时标为“小样本”；单一结局组的 AUROC 记为 —。此处没有分组 CI，不据此排序优劣。</p><button type="button" class="text-button" data-export="subgroup_metrics">所有模型分层 CSV ↓</button></div></details>
+    <details id="selection-details"><summary>Single-best PRS 如何选择 <span>全训练与各外层折</span></summary><div class="detail-body"><p class="small">在冻结的 PRS 库内，按训练内部共享五折的 pooled OOF log loss 选择。全训练选择用于验证集；训练集 OOF 的 PRS 选择嵌套在外层训练折中。下表损失仅用于选择，不是最终泛化性能。</p><div class="table-scroll"><table id="selection-table"><caption>完整的训练内 PRS 选择记录</caption><thead><tr><th scope="col">疾病</th><th scope="col">PC 输入</th><th scope="col">选择范围</th><th scope="col">PRS</th><th scope="col">内部选择 log loss</th></tr></thead><tbody></tbody></table></div><button type="button" class="text-button" data-export="single_prs_selections">选择记录 CSV ↓</button></div></details>
+    <details><summary>样本量与完整比较记录 <span>4 个人群口径</span></summary><div class="detail-body"><div class="table-scroll"><table id="counts-table"><caption>人数为独立患者数；两套 PC 与所有模型共享同一人群</caption><thead><tr><th scope="col">疾病</th><th scope="col">人群</th><th scope="col">人数</th><th scope="col">病例</th><th scope="col">亲缘组</th></tr></thead><tbody></tbody></table></div><div class="download-actions"><button type="button" class="text-button" data-export="cohort_counts">人数 CSV ↓</button><button type="button" class="text-button" data-export="paired_differences">全部配对比较 CSV ↓</button></div></div></details>
+  </section>
+  <section id="methods" class="support-section" aria-labelledby="methods-title">
+    <div class="eyebrow">METHODS &amp; INTERPRETATION</div><h2 id="methods-title">保持比较口径一致</h2>
+    <div class="method-grid"><article><span class="method-step">01 / 坐标</span><h3>同一外部参考空间</h3><p>2,503 名 1000G 参考样本，固定 53,571 个 GRCh38 SNP、等位基因频率与 PCA loadings。PCA 仅在外部参考样本拟合。</p></article><article><span class="method-step">02 / 训练</span><h3>替换输入，重新拟合</h3><p>保持 PRS 库及学生策略固定，完整替换 PC 输入后重算教师软标签、重训学生。训练内拟合预处理；验证集仅预测。</p></article><article><span class="method-step">03 / 评估</span><h3>共享患者与划分</h3><p>方法间共享患者及外层五折。嵌套 OOF 软标签严格排除外层患者及已知亲缘组；乳腺癌仅纳入符合资格的女性。</p></article></div>
+    <details><summary>模型定义与训练约定 <span>6 个模型的角色</span></summary><div class="detail-body"><dl class="definitions"><dt>M0_KD</dt><dd>主要简洁蒸馏学生，固定 PRS 输入、PC 驱动的权重、协变量与单调年龄基线；无额外 PRS × 年龄乘子。</dd><dt>H_SELECTED</dt><dd>本报告指旧分析的 BIO_POLICY，含 HGB 的跨家族选择。不同于旧表中只在参数化学生内选择的同名 H_SELECTED。</dd><dt>TabPFN_v3</dt><dd>教师模型。验证集以全训练数据为 context；嵌套 OOF 使用相应外层训练数据。种子 42，16 个 estimators。</dd><dt>M0_SUP</dt><dd>相同简洁学生结构，仅用真实训练标签监督。</dd><dt>LR_ALL</dt><dd>全部冻结 PRS + 线性 age_sd、sex、10 个 PCs 的普通无惩罚 LR。</dd><dt>LR_SINGLE_BEST</dt><dd>训练内从冻结的 T2D / CAD / BC 的 26 / 7 / 5 个 PRS 中选一个，再加同样协变量；“最佳”仅限该 PRS 库。</dd></dl><p>结构、超参数、迭代数与学生主种子 17 固定；新 PC 空间没有重新搜索最优配置。PRS 保持原始分数，未进行 PC 残差化；最终模型没有再加入官方 PCs。校准截距与斜率仅作诊断。</p><p>53,571 SNP 坐标是此前另行拟合并冻结的参考空间。上游候选 marker panel 的覆盖率为 89.9914%，不代表完整复现上游模型。</p></div></details>
+    <details><summary>解读边界与 All of Us 迁移 <span>外部验证仍待完成</span></summary><div class="detail-body"><p>原 validation 已参与开发，不能视作从未使用的测试集。亲缘过滤为事后敏感性分析：训练集保持不变，仅过滤验证集；基因型推断的亲缘组不等于已确认的家系。无法判定的病例保留。</p><p>当前结果只检验 decipEHR 内固定策略对 PC 替换的敏感性。遗传相似性标签、连续 PCs、祖源比例与自报种族 / 族裔是不同变量；不应一概弃用 AoU 官方祖源信息。</p><p>迁移前需冻结共同参考、变异和等位基因，核对 PRS 覆盖、表型、观察时间及女性资格。原 age_sd 的均值 / 标准差映射尚未恢复，不能用 AoU 自身标准化的年龄直接替换。独立校准、外部测试、亲缘与 GWAS 重叠审查均需另行完成。</p><p>AoU 版本质量问题、Workbench 数据及模型导出要求请按执行时的版本核查。下列来源沿用原报告 2026-11-04 的查阅记录，本次只重排展示。</p><ul id="sources"></ul><p><a href="report_zh.html">打开原始完整报告与详细迁移讨论 ↗</a></p></div></details>
+  </section>
+  <footer><div><strong>decipEHR · 本地研究报告</strong><p>展示更新 · 2026.11.05　/　结果来自封存汇总表，未重新训练或计算 bootstrap。</p></div><a href="academic_assets/PRESENTATION.json">展示版本记录 ↗</a></footer>
+</main>
+<noscript><div class="noscript">此交互报告需要启用 JavaScript；可打开同目录的 report_zh.html 阅读原始静态报告。</div></noscript>
+<script id="report-data" type="application/json">@@DATA@@</script>
+<script>@@SCRIPT@@</script>
+</body>
+</html>

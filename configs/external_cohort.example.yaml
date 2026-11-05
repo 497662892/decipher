@@ -1,0 +1,46 @@
+# All paths are relative to THIS file; absolute paths are also accepted.
+schema_version: 1
+cohort: my_external_cohort
+bundle: ../models/external_reference_pc_bundle
+run_dir: ../outputs/external/my_cohort
+genome_build: GRCh38
+genotypes:
+  - format: pfile
+    path: ../data/external/cohort
+# For chromosome shards, add one entry per chromosome. Other supported formats:
+# - {format: bfile, path: ../data/external/chr1}
+# - {format: vcf, path: ../data/external/chr1.vcf.gz, dosage_field: DS}
+# - {format: bgen, path: ../data/external/chr1.bgen,
+#    sample: ../data/external/chr1.sample, ref_mode: ref-first}
+covariates: ../data/external/covariates.csv
+columns: {sampleid: sampleid, sex: sex, age: age_sd}
+sex_mapping: {Female: Female, Male: Male, Unknown: Unknown}
+age:
+  mode: deferred
+# Once the supplied values are verifiably in the original training age_sd scale:
+# age:
+#   mode: training_scale
+#   contract_id: decipehr_provided_age_sd_v1
+#   provenance: "Document the actual source/conversion; do not use target-cohort z-scores"
+coverage:
+  missing_variants: error
+  # reference_mean explicitly represents absent SNPs as missing and lets PLINK
+  # impute from the frozen reference AF; the following coverage gates still apply.
+  min_prs_fraction: 0.99
+  min_pc_fraction: 0.99
+qc:
+  max_sample_missingness: 0.05
+runtime:
+  plink2: plink2
+  threads: 4
+  memory_mb: 32000
+inference:
+  scope: trainval_refit
+  models: [tabpfn, student]
+  student: M0_KD
+  traits: [T2D, cad, bc]
+  device: cuda
+  batch_size: 1024
+  # Frozen TabPFN auto precision is batch-size sensitive. For exact whole-cohort
+  # replay, set this >= the eligible cohort size; see measured differences in the handbook.
+  name: primary
